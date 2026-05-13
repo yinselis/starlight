@@ -10862,7 +10862,7 @@ window.triggerRpOpen = function() {
 // 赛博终端 - 记忆与情报系统核心逻辑
 // ==========================================
 
-// 1. 触发判断器 (修复版：支持群聊)
+// 1. 触发判断器 (修复版：支持群聊 + 彻底拦截并发重复总结)
 async function checkAndTriggerMemorySummary(contactId) {
     const settings = await loadFromDB(`chat_settings_${contactId}`) || {};
     if (!settings.autoSummary) return; // 如果没开自动总结开关，直接退出
@@ -10874,6 +10874,12 @@ async function checkAndTriggerMemorySummary(contactId) {
     if (history.length - lastSummaryIndex >= threshold) {
         console.log(`触发记忆提取机制！当前条数：${history.length}，上次总结节点：${lastSummaryIndex}`);
         
+        // 【核心修复】：在发起网络请求前，立刻马上把标记点更新到数据库！
+        // 防止因为请求延迟期间 AI 正在连发气泡，导致瞬间触发无数个重复的总结请求！
+        const currentLength = history.length;
+        settings.lastSummaryIndex = currentLength;
+        await saveToDB(`chat_settings_${contactId}`, settings);
+
         // 获取联系人信息，判断是否是群聊
         const contacts = await loadFromDB('chat_contacts') || [];
         const contactInfo = contacts.find(c => c.id === contactId);
@@ -10881,16 +10887,16 @@ async function checkAndTriggerMemorySummary(contactId) {
         const contactName = contactInfo ? contactInfo.name : 'TA';
 
         // 截取这段时间内的聊天记录
-        const msgsToSummarize = history.slice(lastSummaryIndex, history.length);
+        const msgsToSummarize = history.slice(lastSummaryIndex, currentLength);
         
-        // ★ 核心修改：如果是群聊，带上发言人的名字
+        // 拼接上下文
         const recentChat = msgsToSummarize.map(m => {
             let speaker = m.role === 'user' ? '我' : (m.speakerName || contactName);
             return `${speaker}: ${m.content}`;
         }).join('\n');
         
-        // 异步并发执行：提取记忆卡片
-        generateChatMemory(contactId, recentChat, contactName, history.length, isGroup);
+        // 异步并发执行：提取记忆卡片 (传入 0 代表里面不需要再更新节点了，我们在外面已经光速更新完毕)
+        generateChatMemory(contactId, recentChat, contactName, 0, isGroup);
     }
 }
 
