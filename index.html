@@ -8491,7 +8491,19 @@ else if (cleanText.includes('[日记提议:')) {
 }
 
 const ts = Date.now();
-history.push({ role: 'assistant', speakerId: speakerInfo ? speakerInfo.id : undefined, speakerName: speakerName ? speakerName : undefined, content: cleanText, msgType: msgType, voiceDuration: voiceDur, rpAmount: rpAmt, locationName: locName, quoteText: quoteText, proposedName: proposedName, timestamp: ts });
+history.push({ 
+    role: 'assistant', 
+    speakerId: typeof speakerInfo !== 'undefined' ? speakerInfo.id : undefined, 
+    speakerName: typeof speakerName !== 'undefined' ? speakerName : undefined, 
+    content: cleanText, 
+    msgType: msgType, 
+    voiceDuration: voiceDur, 
+    rpAmount: rpAmt, 
+    locationName: locName, 
+    quoteText: quoteText, 
+    proposedName: proposedName, 
+    timestamp: ts 
+});
 await saveToDB(`chat_history_${contactId}`, history);
 
 // --- 改为局部追加，避免闪屏 ---
