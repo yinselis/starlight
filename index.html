@@ -8404,23 +8404,23 @@ if (data.usage) {
 
 const reply = data.choices[0].message.content.trim();
         
-        hideTyping(); // 收到大段回复后先隐藏初始的输入状态
-        
         // 按换行符拆分，去除空行
-        const lines = reply.split('\n').map(s => s.trim()).filter(s => s !== '');
-        
-        // 模拟真人发微信，根据字数动态延迟，一条一条连发！
-        for (let i = 0; i < lines.length; i++) {
-            let line = lines[i];
-            
-            // 除了第一条（前面网速思考的时候已经等过了），后面的每条都要模拟打字延迟
-            if (i > 0) {
-                showTyping(); // 重新亮起“正在输入...”
-                // 模拟真实打字时间：基础延迟 600ms + 每个字大概 60ms（最高不超过 2.5秒）
-                let delay = 600 + Math.min(line.length * 60, 2500);
-                await new Promise(r => setTimeout(r, delay));
-                hideTyping();
-            }
+const lines = reply.split('\n').map(s => s.trim()).filter(s => s !== '');
+
+// 模拟真人发微信，根据字数动态延迟，一条一条连发！
+for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    
+    // 除了第一条，后面的每条都要模拟打字延迟
+    if (i > 0) {
+        let delay = 600 + Math.min(line.length * 60, 2500);
+        await new Promise(r => setTimeout(r, delay));
+    }
+
+hideTyping(); // ★ 全局只在这里隐藏一次！彻底解决闪屏！
+
+// ★ 新增：AI 发送完消息后，悄悄在后台检查是否需要总结记忆
+checkAndTriggerMemorySummary(contactId);
             
 // == 开始替换为这段解析代码 ==
 let msgType = 'text';
@@ -8836,15 +8836,15 @@ ${replyCountText}
         for (let i = 0; i < bubbles.length; i++) {
             let bubble = bubbles[i];
             
-            let speakerName = '神秘群员';
-            let rawContent = bubble;
-            const nameMatch = bubble.match(/^\[(.*?)\]/);
-            if (nameMatch) {
-                speakerName = nameMatch[1].trim();
-                rawContent = bubble.replace(/^\[.*?\]\s*/, '').trim(); 
-            }
+let speakerName = '神秘群员';
+let rawContent = bubble;
+const nameMatch = bubble.match(/^\[(.*?)\]/);
+if (nameMatch) {
+    speakerName = nameMatch[1].trim();
+    rawContent = bubble.replace(/^\[.*?\]\s*/, '').trim(); 
+}
 
-            let speakerInfo = members.find(m => m.name === speakerName); 
+let speakerInfo = members.find(m => m.name === speakerName); 
             if (!speakerInfo) {
                 const matches = members.filter(m => m.name.includes(speakerName) || speakerName.includes(m.name));
                 if (matches.length > 0) {
@@ -8866,7 +8866,7 @@ ${replyCountText}
             
             let delay = (i === 0) ? 600 : 800 + Math.min(rawContent.length * 40, 2000);
             await new Promise(r => setTimeout(r, delay));
-            hideTyping(); 
+            
 
             // 解析特殊内容
 let msgType = 'text';
@@ -9079,7 +9079,7 @@ else if (cleanText.includes('[日记提议:')) {
             area.scrollTop = area.scrollHeight;
             await updateContactPreview(contactId, `${speakerName}: ${cleanText}`);
         }
-
+hideTyping();
     } catch (e) {
         hideTyping();
         showToast("群聊引擎报错：" + e.message);
@@ -11126,7 +11126,7 @@ memories.sort((a, b) => b.timestamp - a.timestamp);
         
         div.innerHTML = `
     <div class="mem-glass-header"><span>RECORD / ${timeStr}</span></div>
-    <textarea class="mem-glass-textarea" spellcheck="false" id="mem_text_${mem.id}">${mem.content}</textarea>
+    <textarea class="mem-glass-textarea" spellcheck="false" id="mem_text_${mem.id}" onblur="saveMemory(${mem.id})">${mem.content}</textarea>
     <div class="mem-action-row">
         <div class="mem-btn-text danger" onclick="deleteMemory(${mem.id})">抹除</div>
         <!-- 新增了归档按钮 -->
