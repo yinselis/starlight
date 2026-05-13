@@ -12692,6 +12692,42 @@ window.handleRenameProposalClick = async function(role, proposedName, charId, ti
     };
 };
 
+// === 🚨 紧急逃生舱：连续快速点击屏幕 7 次，彻底清空自定义 CSS ===
+let escapeClickCount = 0;
+let escapeLastClickTime = 0;
+
+document.addEventListener('touchstart', async (e) => {
+    const currentTime = Date.now();
+    // 如果两次点击间隔小于 500 毫秒，就算作连续点击
+    if (currentTime - escapeLastClickTime < 500) {
+        escapeClickCount++;
+    } else {
+        escapeClickCount = 1;
+    }
+    escapeLastClickTime = currentTime;
+
+    // 连续点击 7 次触发隐藏机关
+    if (escapeClickCount >= 7) {
+        escapeClickCount = 0; // 重置计数
+        
+        // 1. 瞬间物理拔管，清空页面上正在生效的全局 CSS
+        const styleTag = document.getElementById('dynamicDesktopCss');
+        if (styleTag) styleTag.innerHTML = '';
+        
+        // 2. 清除 IndexedDB 数据库里保存的 CSS，防止下次刷新又加载
+        if (typeof saveToDB === 'function') {
+            await saveToDB('desktop_custom_css', '');
+        }
+        
+        // 3. 弹窗提示
+        if (typeof showToast === 'function') {
+            showToast('🚨 触发紧急逃生舱：已强制清空全局 CSS！');
+        } else {
+            alert('🚨 紧急逃生舱：自定义 CSS 已清空！');
+        }
+    }
+}, { passive: true, capture: true }); // 使用 capture 捕获模式，绝对无视任何层级遮挡和事件拦截
+
 </script>
 </body>
 </html>
