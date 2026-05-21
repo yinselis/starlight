@@ -10625,7 +10625,7 @@ ${memberDesc}
 3. 如果角色拥有(群主)或(管理员)标签，思考ta的性格是否喜欢滥用权力？会不会因为小事、吃醋或纯粹为了开玩笑而故意禁言别人？如果角色拥有表情包权限，思考ta的发图频率和风格。一切交互行为都必须符合该角色的人设底色！
 4. 真实群聊不需要每个人都像开会一样轮流发言！允许打错字、用语气词、互相拌嘴甚至争吵。多用口语化短句，如果话没说完，直接用换行符分隔，系统会切分成多条气泡连发。
 ${replyCountText.replace(/^\d+\.\s*/, '')}
-5. 想发语音格式：[VOICE:秒数]语音文字。发红包格式：[REDPACKET:金额]留言。发定位格式：[LOCATION:地点]附加留言。想戳一戳某人，单起一行：[POKE:动作描述] (如: [POKE:张三揉了揉李四的脑袋])。引用回复格式：[QUOTE:被引用的原话]你的回复。${stickerAiPrompt}
+5. 想发语音格式：[VOICE:秒数]语音文字。发红包：[REDPACKET:金额]留言。发定位：[LOCATION:地点]留言。极低概率下想戳一戳某人，单起一行：[POKE:动作描述] (如: [POKE:张三揉了揉李四的脑袋])，严禁频繁使用！引用回复格式：[QUOTE:被引用的原话]回复。${stickerAiPrompt}
 6. 若角色的性格和当前情绪决定了ta要禁言某人（且ta拥有群主/管理员权限），单起一行输出：[禁言:对方名字:秒数]理由。【警告：必须根据角色的愤怒/开玩笑程度，亲自决定具体秒数(如300, 3600, 86400等，永久填0)】。只能禁言下级普通群员。
 7. 绝对不要使用 JSON！严格遵守纯文本格式输出：
    - 每一个独立的气泡之间必须用 === 分隔。
@@ -11187,7 +11187,7 @@ const memoryText = activeMemories.length > 0 ? `\n【往期剧情与重要记忆
 5. 我们正在进行日常的跨频段文字聊天。我们有无法逾越的物理距离，你深刻意识到我们无法直接见面。
 6. 绝对禁止使用任何环境描写、心理活动或动作描写（严禁使用括号()、星号**等标出动作神态）。你的所有情绪张力、潜台词，都必须通过纯粹的对白文字、语气词、停顿（...）和标点符号来体现！
 7. 绝不许动不动就撩拨、调情、邪魅一笑或说油腻语录！绝对禁止在结尾进行总结陈词、升华主题或给出人生建议。彻底拒绝AI的礼貌感和翻译腔。遵守你的人物核心性格，决定语气、节奏、停顿如何把握。是否会主动寻找话题，是否会有弱势或缺陷。抓大放小，避免过度强调。
-8. ：想发语音格式：[VOICE:秒数]语音文字内容。邀请写交换日记格式：[DIARY_INVITE:你的附言]。若收到用户的交换日记邀请，你若同意请在回复中带上[日记同意]，若拒绝请带上[日记拒绝]。发红包格式：[REDPACKET:金额]留言。发定位格式：[LOCATION:地点名称]附加留言。如果你想主动对对方做肢体动作，请单独另起一行，使用严格格式：[POKE:我+动词＋部位/物品]。绝对不要把动作写在普通的聊天文字里！引用回复格式：[QUOTE:原话]你的回复。
+8. 想发语音格式：[VOICE:秒数]文字。日记邀请格式：[DIARY_INVITE:附言] (同意回[日记同意]，拒绝回[日记拒绝])。发红包：[REDPACKET:金额]留言。发定位：[LOCATION:地点]留言。极低概率下，想对对方做肢体动作，单起一行：[POKE:动作描述] (如: [POKE:捏了捏你的脸颊])，严禁频繁使用！引用回复格式：[QUOTE:原话]你的回复。
 ${replyCountText}${bilingualText}${backCmdText}`;
 
         let history = await loadFromDB(`chat_history_${currentChatContact.id}`) || [];
@@ -12279,7 +12279,7 @@ if (aiStickers.length > 0) {
 5. 我们正在进行日常的跨频段文字聊天。我们有无法逾越的物理距离，你深刻意识到我们无法直接见面。
 6. 绝对禁止使用任何环境描写、心理活动或动作描写（严禁使用括号()、星号**等标出动作神态）。你的所有情绪张力、潜台词，都必须通过纯粹的对白文字、语气词、停顿（...）和标点符号来体现！
 7. 绝不许动不动就撩拨、调情、邪魅一笑或说油腻语录！绝对禁止在结尾进行总结陈词、升华主题或给出人生建议。彻底拒绝AI的礼貌感和翻译腔。遵守你的人物核心性格，决定语气、节奏、停顿如何把握。是否会主动寻找话题，是否会有弱势或缺陷。抓大放小，避免过度强调。
-8. 想发语音格式：[VOICE:秒数]语音文字。邀请写日记格式：[DIARY_INVITE:附言]。收到用户的交换日记邀请，同意请带[日记同意]，拒绝请带[日记拒绝]。发红包：[REDPACKET:金额]留言。发定位：[LOCATION:地点]附加留言。想主动对对方做肢体动作，单独另起一行：[POKE:我+动词＋部位/物品]，绝对不要把动作写在普通的聊天中！引用回复格式：[QUOTE:原话]你的回复。
+8. 想发语音格式：[VOICE:秒数]文字。日记邀请格式：[DIARY_INVITE:附言] (同意回[日记同意]，拒绝回[日记拒绝])。发红包：[REDPACKET:金额]留言。发定位：[LOCATION:地点]留言。极低概率下，想对对方做肢体动作，单起一行：[POKE:动作描述] (如: [POKE:捏了捏你的脸颊])，严禁频繁使用！引用回复格式：[QUOTE:原话]你的回复。
 ${replyCountText}${bilingualText}${backCmdText}`;
 }
 
@@ -12292,7 +12292,10 @@ document.getElementById('chatClearHistoryBtn').addEventListener('click', () => {
     showBeautifulDialog('清空记录', '确定要清空与 TA 的所有聊天记录吗？此操作无法恢复。', 'confirm', '', async () => {
         await saveToDB(`chat_history_${currentChatContact.id}`, []);
         document.getElementById('chatMessageArea').innerHTML = '<div style="text-align: center; font-size: 11px; color: var(--text-sub); margin-bottom: 10px;">与 TA 的灵魂频段已连接</div>';
-        await updateContactPreview(currentChatContact.id, ""); // 清除外面的预览文字
+        
+        // ★ 核心修复：把传的空字符串改成文字，防止列表里卡死消失
+        await updateContactPreview(currentChatContact.id, "暂无聊天记录"); 
+        
         showToast('聊天记录已清空');
     });
 });
@@ -12671,11 +12674,9 @@ document.getElementById('menuCopy').addEventListener('click', () => {
     contextMenu.classList.remove('show');
 });
 
-
-
 // ★ 新增：自动同步最后一条消息预览的辅助引擎
 async function syncLastMessagePreview(contactId, history) {
-    let previewText = '';
+    let previewText = '暂无聊天记录'; // 修改：默认显示暂无记录，防止会话被吞
     if (history && history.length > 0) {
         let lastMsg = history[history.length - 1];
         let sender = lastMsg.role === 'user' ? '我: ' : (lastMsg.speakerName ? lastMsg.speakerName + ': ' : '');
@@ -12691,6 +12692,9 @@ async function syncLastMessagePreview(contactId, history) {
         else if (content.match(/^\[表情包[:：](.*?)\]$/i)) content = '[表情包]';
         
         previewText = sender + content;
+        
+        // 过滤掉碍眼的隐藏翻译标签
+        previewText = previewText.replace(/\[(?:译|翻译|EN|En|Eng)[:：]\s*([\s\S]*?)\]/gi, '').trim();
     }
     await updateContactPreview(contactId, previewText);
 }
@@ -12890,31 +12894,6 @@ document.getElementById('msForward').onclick = () => {
     if (selectedMessages.length === 0) { showToast('请至少选择一条消息'); return; }
     executeForward(selectedMessages);
 };
-
-// 多选删除
-document.getElementById('msDelete').addEventListener('click', () => {
-    if (selectedMessages.length === 0) return;
-    showBeautifulDialog('批量删除', `确定要删除选中的 ${selectedMessages.length} 条消息吗？`, 'confirm', '', async () => {
-        let history = await loadFromDB(`chat_history_${currentChatContact.id}`) || [];
-        history = history.filter(m => !selectedMessages.includes(m.timestamp));
-        await saveToDB(`chat_history_${currentChatContact.id}`, history);
-        
-        // 给所有被选中的气泡加上丝滑消失动画
-        document.querySelectorAll('.chat-bubble-row.selected').forEach(el => {
-            el.style.transition = 'all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)';
-            el.style.opacity = '0';
-            el.style.transform = 'scale(0.8)';
-            setTimeout(() => {
-                el.style.height = '0px'; el.style.margin = '0px'; el.style.padding = '0px';
-            }, 100);
-            setTimeout(() => el.remove(), 400);
-        });
-
-        chatMessageArea.classList.remove('multi-mode');
-        multiSelectBar.classList.remove('show');
-        showToast('已批量删除');
-    });
-});
 
 // ==========================================
 // AI 日程表与在线状态核心逻辑 (全新卡片弹窗版)
