@@ -10230,7 +10230,10 @@ const aiName = document.getElementById('chatRoomTitle').innerText || 'TA';
     history.push({ role: 'system', content: sysText, timestamp: tsSys });
     
     // 在界面上渲染灰色小字
-    document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', `<div class="chat-system-msg" data-ts="${tsSys}"><span class="chat-system-msg-text">${sysText}</span></div>`);
+    const loadingEl = document.getElementById('chatLoadingBubble');
+const sysHtml = `<div class="chat-system-msg" data-ts="${tsSys}"><span class="chat-system-msg-text">${sysText}</span></div>`;
+if (loadingEl) loadingEl.insertAdjacentHTML('beforebegin', sysHtml);
+else document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', sysHtml);
     
     // 把暗号从 AI 的气泡里抹掉
     cleanText = cleanText.replace(/\[日记(同意|拒绝)\]/i, '').trim();
@@ -10248,7 +10251,10 @@ if (aiPokeMatch) {
     history.push({ role: 'system', content: pokeText, timestamp: tsPoke });
     await saveToDB(`chat_history_${contactId}`, history);
     
-    document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', `<div class="chat-system-msg" data-ts="${tsPoke}"><span class="chat-system-msg-text">${pokeText}</span></div>`);
+    const loadingEl = document.getElementById('chatLoadingBubble');
+const sysHtml = `<div class="chat-system-msg" data-ts="${tsPoke}"><span class="chat-system-msg-text">${pokeText}</span></div>`;
+if (loadingEl) loadingEl.insertAdjacentHTML('beforebegin', sysHtml);
+else document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', sysHtml);
     
     cleanText = cleanText.replace(/\[POKE:.*?\]/i, '').trim();
     if (!cleanText) {
@@ -10796,7 +10802,10 @@ const muteSecs = aiMuteMatch[2] ? parseInt(aiMuteMatch[2]) : (Math.floor(Math.ra
             const tsMute = Date.now() + i + 10;
             history.push({ role: 'system', content: sysText, timestamp: tsMute });
             await saveToDB(`chat_history_${contactId}`, history);
-            document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', `<div class="chat-system-msg" data-ts="${tsMute}"><span class="chat-system-msg-text" style="color:#D67A7A; background:#FFF0F0;">${sysText}</span></div>`);
+            const loadingEl = document.getElementById('chatLoadingBubble');
+const sysHtml = `<div class="chat-system-msg" data-ts="${tsMute}"><span class="chat-system-msg-text" style="color:#D67A7A; background:#FFF0F0;">${sysText}</span></div>`;
+if (loadingEl) loadingEl.insertAdjacentHTML('beforebegin', sysHtml);
+else document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', sysHtml);
         }
     }
     cleanText = cleanText.replace(/\[禁言:.*?\].*/i, '').trim();
@@ -10814,7 +10823,10 @@ if (aiPokeMatch) {
     history.push({ role: 'system', content: pokeText, timestamp: tsPoke });
     await saveToDB(`chat_history_${contactId}`, history);
     
-    document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', `<div class="chat-system-msg" data-ts="${tsPoke}"><span class="chat-system-msg-text">${pokeText}</span></div>`);
+    const loadingEl = document.getElementById('chatLoadingBubble');
+const sysHtml = `<div class="chat-system-msg" data-ts="${tsPoke}"><span class="chat-system-msg-text">${pokeText}</span></div>`;
+if (loadingEl) loadingEl.insertAdjacentHTML('beforebegin', sysHtml);
+else document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', sysHtml);
     
     cleanText = cleanText.replace(/\[POKE:.*?\]/i, '').trim();
     if (!cleanText) {
