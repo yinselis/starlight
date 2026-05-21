@@ -3933,6 +3933,24 @@ body.no-blur-mode .phone-bottom { background-color: #FDFBF7 !important; }
     transform: rotate(45deg); margin-top: -2px;
 }
 
+/* 系统小字多选框伪造补丁 */
+#chatMessageArea.multi-mode .chat-system-msg[data-ts] {
+    padding-left: 38px; cursor: pointer; position: relative; transition: padding 0.3s;
+}
+#chatMessageArea.multi-mode .chat-system-msg[data-ts]::before {
+    content: ''; position: absolute; left: 5px; top: 50%; transform: translateY(-50%);
+    width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid rgba(184,156,142,0.4);
+    box-sizing: border-box; transition: 0.3s;
+}
+#chatMessageArea.multi-mode .chat-system-msg[data-ts].selected::before {
+    background: var(--accent); border-color: var(--accent);
+}
+#chatMessageArea.multi-mode .chat-system-msg[data-ts].selected::after {
+    content: ''; position: absolute; left: 13.5px; top: 50%;
+    width: 5px; height: 10px; border: solid #fff; border-width: 0 2.5px 2.5px 0;
+    transform: translateY(-60%) rotate(45deg); z-index: 10;
+}
+
 /* === 多选底栏 === */
 .multi-select-bar {
     position: absolute; bottom: 0; left: 0; width: 100%; height: 65px;
@@ -12567,7 +12585,7 @@ let touchStartY = 0;
 
 chatMessageArea.addEventListener('touchstart', (e) => {
     if (chatMessageArea.classList.contains('multi-mode')) return; 
-    const bubbleRow = e.target.closest('.chat-bubble-row');
+    const bubbleRow = e.target.closest('.chat-bubble-row, .chat-system-msg[data-ts]');
     if (!bubbleRow || bubbleRow.id === 'chatLoadingBubble') return;
     
     if (pressTimer) clearTimeout(pressTimer); // 修复多指边缘误触导致定时器丢失的 Bug
@@ -12597,7 +12615,7 @@ chatMessageArea.addEventListener('touchcancel', () => { if(pressTimer) { clearTi
 chatMessageArea.addEventListener('scroll', () => { if(pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
 
 chatMessageArea.addEventListener('contextmenu', (e) => { 
-    const bubbleRow = e.target.closest('.chat-bubble-row');
+    const bubbleRow = e.target.closest('.chat-bubble-row, .chat-system-msg[data-ts]');
     if (bubbleRow && !bubbleRow.id.includes('Loading')) { e.preventDefault(); showBubbleMenu(bubbleRow, e); }
 });
 
@@ -12619,30 +12637,33 @@ function showBubbleMenu(bubbleRow, eventObj) {
         if (transEl) transEl.remove();
         
         extractedText = clone.innerText.trim();
-    } else {
-        // 特殊气泡类型提取
-        const voiceTrans = bubbleRow.querySelector('.chat-voice-trans');
-        if (voiceTrans) {
-            extractedText = '[语音] ' + voiceTrans.innerText.trim();
-        } else if (bubbleRow.querySelector('.chat-rp-bubble')) {
-            const rpMsg = bubbleRow.querySelector('.rp-msg');
-            extractedText = '[红包] ' + (rpMsg ? rpMsg.innerText : '');
-        } else if (bubbleRow.querySelector('.chat-location-bubble')) {
-            const locName = bubbleRow.querySelector('.loc-name');
-            extractedText = '[定位] ' + (locName ? locName.innerText : '');
-        } else if (bubbleRow.querySelector('img')) {
-            extractedText = '[图片]';
-        } else if (bubbleRow.querySelector('.chat-diary-invite-bubble')) {
-            extractedText = '[日记邀请]';
-        }
+} else if (bubbleRow.classList.contains('chat-system-msg')) {
+    extractedText = '[系统记录] ' + bubbleRow.innerText.trim();
+} else {
+    // 特殊气泡类型提取
+    const voiceTrans = bubbleRow.querySelector('.chat-voice-trans');
+    if (voiceTrans) {
+        extractedText = '[语音] ' + voiceTrans.innerText.trim();
+    } else if (bubbleRow.querySelector('.chat-rp-bubble')) {
+        const rpMsg = bubbleRow.querySelector('.rp-msg');
+        extractedText = '[红包] ' + (rpMsg ? rpMsg.innerText : '');
+    } else if (bubbleRow.querySelector('.chat-location-bubble')) {
+        const locName = bubbleRow.querySelector('.loc-name');
+        extractedText = '[定位] ' + (locName ? locName.innerText : '');
+    } else if (bubbleRow.querySelector('img')) {
+        extractedText = '[图片]';
+    } else if (bubbleRow.querySelector('.chat-diary-invite-bubble')) {
+        extractedText = '[日记邀请]';
     }
+}
 
-    activeBubbleData = {
-        ts: parseInt(bubbleRow.dataset.ts),
-        isMe: bubbleRow.classList.contains('me'),
-        text: extractedText || '未知内容',
-        el: bubbleRow
-    };
+activeBubbleData = {
+    ts: parseInt(bubbleRow.dataset.ts),
+    // ★ 核心：强行赋予系统消息“我方权限”，这样长按时才会弹出“撤回/删除”按钮！
+    isMe: bubbleRow.classList.contains('me') || bubbleRow.classList.contains('chat-system-msg'),
+    text: extractedText || '未知内容',
+    el: bubbleRow
+};
     
     // 如果是对方发的消息，隐藏“撤回”按钮
     document.getElementById('menuRecall').style.display = activeBubbleData.isMe ? 'block' : 'none';
@@ -12755,7 +12776,7 @@ document.getElementById('menuMultiSelect').addEventListener('click', () => {
 
 chatMessageArea.addEventListener('click', (e) => {
     if (!chatMessageArea.classList.contains('multi-mode')) return;
-    const bubbleRow = e.target.closest('.chat-bubble-row');
+    const bubbleRow = e.target.closest('.chat-bubble-row, .chat-system-msg[data-ts]');
     if (!bubbleRow || bubbleRow.id === 'chatLoadingBubble') return;
 
     const ts = parseInt(bubbleRow.dataset.ts);
@@ -12773,7 +12794,7 @@ chatMessageArea.addEventListener('click', (e) => {
 document.getElementById('msCancel').addEventListener('click', () => {
     chatMessageArea.classList.remove('multi-mode');
     multiSelectBar.classList.remove('show');
-    document.querySelectorAll('.chat-bubble-row.selected').forEach(el => el.classList.remove('selected'));
+    document.querySelectorAll('.chat-bubble-row.selected, .chat-system-msg.selected').forEach(el => el.classList.remove('selected'));
 });
 
 // 多选删除
@@ -12788,7 +12809,7 @@ document.getElementById('msDelete').addEventListener('click', () => {
         await syncLastMessagePreview(currentChatContact.id, history);
         
         // 给所有被选中的气泡加上丝滑消失动画
-        document.querySelectorAll('.chat-bubble-row.selected').forEach(el => {
+        document.querySelectorAll('.chat-bubble-row.selected, .chat-system-msg.selected').forEach(el => {
             el.style.transition = 'all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)';
             el.style.opacity = '0';
             el.style.transform = 'scale(0.8)';
@@ -12876,7 +12897,7 @@ window.executeForward = async function(msgTimestamps) {
         const chatMessageArea = document.getElementById('chatMessageArea');
         chatMessageArea.classList.remove('multi-mode');
         document.getElementById('multiSelectBar').classList.remove('show');
-        document.querySelectorAll('.chat-bubble-row.selected').forEach(el => el.classList.remove('selected'));
+        document.querySelectorAll('.chat-bubble-row.selected, .chat-system-msg.selected').forEach(el => el.classList.remove('selected'));
         document.getElementById('bubbleContextMenu').classList.remove('show');
         
         showToast('已成功转发！');
