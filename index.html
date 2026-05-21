@@ -2581,7 +2581,10 @@ body.no-blur-mode .phone-bottom { background-color: #FDFBF7 !important; }
     <div class="modal-content">
         <!-- 核心配置 -->
 <div class="setting-card">
-    <div class="card-title">核心配置</div>
+    <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+    <span>核心配置</span>
+    <span id="openManualBtn" onclick="window.showManual()" style="font-size:11px; background:rgba(184,156,142,0.15); color:var(--accent); padding:4px 10px; border-radius:10px; cursor:pointer; font-weight:bold;">📖 使用说明</span>
+</div>
     
     <!-- 主节点配置 -->
     <div class="api-group" style="margin-bottom: 12px;">
@@ -9879,9 +9882,13 @@ if (msg.role !== 'user' && msg.speakerName) {
     }
     
     let roleBadge = getChatRoleBadge(actualSpeakerId);
+    
+    // ★ 新增：如果是单聊，强制使用最新的备注名，无视历史记录里存的原名
+    let finalDisplayName = (contactInfo && !contactInfo.isGroup) ? currentChatContact.name : msg.speakerName;
+    
     finalBubbleBlock = `
         <div style="display:flex; flex-direction:column; max-width:85%; align-items:flex-start;">
-            <div style="font-size:10px; color:var(--text-sub); margin-left:4px; margin-bottom:2px; font-weight:bold; display:flex; align-items:center;">${roleBadge}${msg.speakerName}</div>
+            <div style="font-size:10px; color:var(--text-sub); margin-left:4px; margin-bottom:2px; font-weight:bold; display:flex; align-items:center;">${roleBadge}${finalDisplayName}</div>
             <div ${bubbleStyle} style="max-width: 100%;">${quoteHtml}${contentHtml}</div>
         </div>
     `;
@@ -9976,10 +9983,21 @@ document.getElementById('sendChatBtn').addEventListener('click', async () => {
         quoteHtml = `<div class="chat-bubble-quote">${safeQuote}</div>`;
     }
     let md = new Date(ts);
-    let tStr = `${md.getHours().toString().padStart(2,'0')}:${md.getMinutes().toString().padStart(2,'0')}`;
-    const area = document.getElementById('chatMessageArea');
-    area.insertAdjacentHTML('beforeend', `
-        <div class="chat-bubble-row me new-pop" data-ts="${ts}">
+let tStr = `${md.getHours().toString().padStart(2,'0')}:${md.getMinutes().toString().padStart(2,'0')}`;
+
+// ★新增：发文字时，只要过了午夜12点就弹日期小字
+let dateDividerHtml = '';
+let lastMsgTs = history.length > 1 ? history[history.length - 2].timestamp : 0;
+if (lastMsgTs) {
+    let lastD = new Date(lastMsgTs);
+    if (lastD.getDate() !== md.getDate() || lastD.getMonth() !== md.getMonth() || lastD.getFullYear() !== md.getFullYear()) {
+        dateDividerHtml = `<div class="chat-system-msg"><span class="chat-system-msg-text" style="background: transparent; color: var(--text-sub); opacity: 0.7; font-weight: bold; font-size: 11px;">${md.getFullYear()}年${md.getMonth() + 1}月${md.getDate()}日</span></div>`;
+    }
+}
+
+const area = document.getElementById('chatMessageArea');
+area.insertAdjacentHTML('beforeend', dateDividerHtml + `
+    <div class="chat-bubble-row me new-pop" data-ts="${ts}">
             <div class="ms-checkbox"></div>
             <div class="chat-time-stamp">${tStr}</div>
             <div class="chat-bubble">${quoteHtml}${content}</div>
@@ -10085,6 +10103,18 @@ if (m.msgType === 'forward_card') {
     textContent = `[发送了一份合并聊天记录卡片，内含如下历史对话：{ ${fwDetail} }]`;
 }
 if (m.quoteText) textContent = `[引用回复了你的消息: "${m.quoteText}"]\n` + textContent;
+
+    // ★给每条消息打上精确时间戳
+    let timeLabel = '';
+    if (m.timestamp) {
+        let d = new Date(m.timestamp);
+        let mm = (d.getMonth()+1).toString().padStart(2,'0');
+        let dd = d.getDate().toString().padStart(2,'0');
+        let hh = d.getHours().toString().padStart(2,'0');
+        let mins = d.getMinutes().toString().padStart(2,'0');
+        timeLabel = `[${mm}月${dd}日 ${hh}:${mins}] `;
+    }
+    textContent = timeLabel + textContent;
     
     if (m.imageUrl) {
         return {
@@ -10248,6 +10278,19 @@ await saveToDB(`chat_history_${contactId}`, history);
 // --- 改为局部追加，避免闪屏 ---
 let md = new Date(ts);
 let tStr = `${md.getHours().toString().padStart(2,'0')}:${md.getMinutes().toString().padStart(2,'0')}`;
+
+// ★新增：AI单聊回复时，只要跨天就弹日期
+let dateDividerHtml = '';
+if (i === 0) {
+    let lastMsgTs = history.length > 1 ? history[history.length - 2].timestamp : 0;
+    if (lastMsgTs) {
+        let lastD = new Date(lastMsgTs);
+        if (lastD.getDate() !== md.getDate() || lastD.getMonth() !== md.getMonth() || lastD.getFullYear() !== md.getFullYear()) {
+            dateDividerHtml = `<div class="chat-system-msg"><span class="chat-system-msg-text" style="background: transparent; color: var(--text-sub); opacity: 0.7; font-weight: bold; font-size: 11px;">${md.getFullYear()}年${md.getMonth() + 1}月${md.getDate()}日</span></div>`;
+        }
+    }
+}
+
 let timeHtml = `<div class="chat-time-stamp" ${['voice', 'redpacket', 'location', 'diary_invite', 'forward_card'].includes(msgType) ? 'style="display:none;"' : ''}>${tStr}</div>`;
 let innerTimeHtml = `<div class="chat-time-stamp" style="margin: 0 4px; align-self: flex-end; padding-bottom: 2px;">${tStr}</div>`;
 let formattedCleanText = (cleanText || '').replace(/\[(?:译|翻译|EN|En|Eng)[:：]\s*([\s\S]*?)\]/gi, '<div class="bilingual-trans">$1</div>');
@@ -10397,8 +10440,8 @@ if (msgType === 'voice') {
 let currentAiName = document.getElementById('chatRoomTitle').innerText || 'TA';
 let roleBadge = '';
 
-            const newRowHtml = `
-                <div class="chat-bubble-row ai new-pop" data-ts="${ts}">
+            const newRowHtml = dateDividerHtml + `
+    <div class="chat-bubble-row ai new-pop" data-ts="${ts}">
                     <div class="ms-checkbox"></div>
                     <div class="chat-bubble-avatar" style="${aiAvatarUrl ? `background-image:url(${aiAvatarUrl});border:none;` : 'background-color: rgba(184,156,142,0.2);'}"></div>
                     <div style="display:flex; flex-direction:column; max-width:85%; align-items:flex-start;">
@@ -10603,8 +10646,19 @@ history.slice(-15).forEach(m => {
     textContent = `[发送了一份合并聊天记录卡片，内含如下历史对话：{ ${fwDetail} }]`;
 }
 
+    // ★给每条消息打上精确时间戳
+    let timeLabel = '';
+    if (m.timestamp) {
+        let d = new Date(m.timestamp);
+        let mm = (d.getMonth()+1).toString().padStart(2,'0');
+        let dd = d.getDate().toString().padStart(2,'0');
+        let hh = d.getHours().toString().padStart(2,'0');
+        let mins = d.getMinutes().toString().padStart(2,'0');
+        timeLabel = `[${mm}月${dd}日 ${hh}:${mins}] `;
+    }
+
     // 拼接文字部分
-    finalUserContent.push({ type: "text", text: `${speaker}: ${textContent}\n` });
+    finalUserContent.push({ type: "text", text: `${timeLabel}${speaker}: ${textContent}\n` });
     
     // 如果有图片，直接把图片对象塞进数组供 AI 读取
     if (m.imageUrl) {
@@ -10779,8 +10833,21 @@ else if (cleanText.includes('[日记提议:')) {
             }
 
             let md = new Date(ts);
-            let tStr = `${md.getHours().toString().padStart(2,'0')}:${md.getMinutes().toString().padStart(2,'0')}`;
-            let timeHtml = `<div class="chat-time-stamp" ${['voice', 'redpacket', 'location', 'diary_invite', 'forward_card'].includes(msgType) ? 'style="display:none;"' : ''}>${tStr}</div>`;
+let tStr = `${md.getHours().toString().padStart(2,'0')}:${md.getMinutes().toString().padStart(2,'0')}`;
+
+// ★新增：AI群聊回复时跨天检测
+let dateDividerHtml = '';
+if (i === 0) {
+    let lastMsgTs = history.length > 1 ? history[history.length - 2].timestamp : 0;
+    if (lastMsgTs) {
+        let lastD = new Date(lastMsgTs);
+        if (lastD.getDate() !== md.getDate() || lastD.getMonth() !== md.getMonth() || lastD.getFullYear() !== md.getFullYear()) {
+            dateDividerHtml = `<div class="chat-system-msg"><span class="chat-system-msg-text" style="background: transparent; color: var(--text-sub); opacity: 0.7; font-weight: bold; font-size: 11px;">${md.getFullYear()}年${md.getMonth() + 1}月${md.getDate()}日</span></div>`;
+        }
+    }
+}
+
+let timeHtml = `<div class="chat-time-stamp" ${['voice', 'redpacket', 'location', 'diary_invite', 'forward_card'].includes(msgType) ? 'style="display:none;"' : ''}>${tStr}</div>`;
             let innerTimeHtml = `<div class="chat-time-stamp" style="margin: 0 4px; align-self: flex-end; padding-bottom: 2px;">${tStr}</div>`;
             let formattedCleanText = (cleanText || '').replace(/\[(?:译|翻译|EN|En|Eng)[:：]\s*([\s\S]*?)\]/gi, '<div class="bilingual-trans">$1</div>');
 
@@ -10917,8 +10984,8 @@ else if (cleanText.includes('[日记提议:')) {
                 quoteHtml = `<div class="chat-bubble-quote">${safeQuote}</div>`;
             }
 
-            const newRowHtml = `
-                <div class="chat-bubble-row ai new-pop" data-ts="${ts}">
+            const newRowHtml = dateDividerHtml + `
+    <div class="chat-bubble-row ai new-pop" data-ts="${ts}">
                     <div class="ms-checkbox"></div>
                     <div class="chat-bubble-avatar" style="${aiAvatarUrl ? `background-image:url(${aiAvatarUrl});border:none;` : 'background-color: rgba(184,156,142,0.2);'}"></div>
                     <div style="display:flex; flex-direction:column; max-width:85%; align-items:flex-start;">
@@ -11123,9 +11190,14 @@ ${replyCountText}${bilingualText}${backCmdText}`;
     
     // 计算时如果发现有 imageUrl，用[图片]二字替代以防计算系统报错，并统计图片数量
     const contextHistory = history.slice(-tempSettings.contextCount).map(m => {
-        if (m.imageUrl) imgCount++;
-        return `${m.role}: ${m.imageUrl ? '[图片]' : m.content}`;
-    }).join('\n');
+    if (m.imageUrl) imgCount++;
+    let timeLabel = '';
+    if (m.timestamp) {
+        let d = new Date(m.timestamp);
+        timeLabel = `[${d.getMonth()+1}月${d.getDate()}日 ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}] `;
+    }
+    return `${timeLabel}${m.role}: ${m.imageUrl ? '[图片]' : m.content}`;
+}).join('\n');
     
     const fullPrompt = `${sysPrompt}\n\n[附带的历史上下文 (${contextHistory ? contextHistory.split('\n').length : 0}条)]:\n${contextHistory}`;
     
@@ -12944,9 +13016,14 @@ async function getChatTokensRealtime() {
     
     let imgCount = 0;
     const contextHistory = history.slice(-contextCount).map(m => {
-        if (m.imageUrl) imgCount++;
-        return `${m.role}: ${m.imageUrl ? '[图片]' : m.content}`;
-    }).join('\n');
+    if (m.imageUrl) imgCount++;
+    let timeLabel = '';
+    if (m.timestamp) {
+        let d = new Date(m.timestamp);
+        timeLabel = `[${d.getMonth()+1}月${d.getDate()}日 ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}] `;
+    }
+    return `${timeLabel}${m.role}: ${m.imageUrl ? '[图片]' : m.content}`;
+}).join('\n');
     
     const fullPrompt = `${sysPrompt}\n\n[附带的历史上下文]:\n${contextHistory}`;
     
@@ -15808,6 +15885,67 @@ document.getElementById('phoneClearWallpaperBtn').addEventListener('click', asyn
     showToast('电话壁纸已清除');
 });
 
+// ==========================================
+// 说明书逻辑：首次打开自动弹，以及手动打开
+// ==========================================
+
+// 将打开函数挂载到 window，保证任何地方都能 100% 呼出
+window.showManual = function() {
+    const modal = document.getElementById('manualModal');
+    if(modal) modal.classList.add('show');
+};
+
+// 绑定关闭按钮
+const closeManualBtn = document.getElementById('closeManualBtn');
+if(closeManualBtn) {
+    closeManualBtn.addEventListener('click', () => {
+        document.getElementById('manualModal').classList.remove('show');
+    });
+}
+
+// 页面加载完成后，检查是不是新用户
+window.addEventListener('load', () => {
+    // 延迟 3.5 秒，等开屏动画播完、主界面稳定后再弹出来，体验最丝滑
+    setTimeout(() => {
+        if (!localStorage.getItem('starlight_has_seen_manual')) {
+            window.showManual();
+            // 标记为已看，下次不再自动弹
+            localStorage.setItem('starlight_has_seen_manual', 'true');
+        }
+    }, 3500);
+});
+
 </script>
+
+<!-- === 新手说明书弹窗 === -->
+<div class="custom-confirm-overlay" id="manualModal" style="z-index: 999999;">
+    <div class="custom-confirm-box" style="width: 85vw; max-width: 320px; padding: 24px 20px; text-align: left;">
+        <div class="cc-title" style="text-align: center; margin-bottom: 16px;">📖 Starlight 漫游指南</div>
+        
+        <div style="max-height: 55vh; overflow-y: auto; font-size: 13.5px; line-height: 1.7; color: var(--text-main); margin-bottom: 20px; padding-right: 5px;">
+            <p>欢迎来到 <b>Starlight</b>，一个沉浸式的 AI 陪伴系统。以下是核心功能指南：</p>
+            
+            <div style="background: #FFF0F0; border: 1px dashed #D67A7A; padding: 12px; border-radius: 12px; margin: 16px 0;">
+                <div style="color: #D67A7A; font-weight: bold; margin-bottom: 6px;">💰 必看：如何省钱 (API设置)</div>
+                由于 AI 记忆推演、电话、总结等功能会消耗大量 Tokens，系统特设了<b>【主/副双节点】</b>：<br>
+                • <b>主节点 (Main)</b>：填入你觉得最聪明的模型 (如 gpt-4o)，专门用于日常聊天对话。<br>
+                • <b>副节点 (Sub)</b>：填入极便宜或免费的模型 (如 gpt-3.5 / 深度求索 等)。<br><br>
+                <b>⚠️ 强烈建议：</b>在【设置】、【电话】、【日记】等各个面板里，务必打开<b>“使用副 API (省流)”</b>的开关！这样后台那些看不见的计算都会用便宜模型，替你省下巨额费用！
+            </div>
+
+            <p><b>💬 聊天与记忆：</b><br>
+            长按聊天气泡可以【转发、撤回、多选】。系统会在后台默默提取你们的记忆星轨，别忘了去【记忆】面板看看 TA 眼中的你。</p>
+
+            <p><b>🎨 桌面美化：</b><br>
+            长按桌面上的任何小组件（如日历、照片），即可唤出毛玻璃和透明度调节面板。在【美化】APP里可以更换全局字体、图标和背景。</p>
+
+            <p><b>☎️ 沉浸式功能：</b><br>
+            尝试给 TA 打个【电话】，或者给 TA 寄一封【信笺】，甚至交换【梦境】与【日记】。不同的 APP 会触发不同的专属记忆羁绊。</p>
+        </div>
+
+        <button class="cc-btn primary" id="closeManualBtn" onclick="document.getElementById('manualModal').classList.remove('show')" style="width: 100%; border-radius: 14px; box-shadow: 0 4px 16px rgba(184,156,142,0.3);">我知道了</button>
+    </div>
+</div>
+
 </body>
 </html>
