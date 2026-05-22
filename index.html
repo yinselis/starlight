@@ -11354,8 +11354,6 @@ async function sendSpecialMessage(type, content, voiceDuration = 0, rpAmount = 0
     document.getElementById('chatMenuToggleBtn').classList.remove('active');
 }
 
-// 绑定记忆功能
-document.getElementById('quickMemoryBtn').addEventListener('click', () => { if (typeof showToast === 'function') showToast('该功能正在开发接入中...'); });
 
 // 绑定我们刚写好的电话功能！
 document.getElementById('quickCallBtn').addEventListener('click', () => { if(window.openPhoneApp) window.openPhoneApp(); });
@@ -14293,6 +14291,7 @@ document.getElementById('clearAllDataBtn').addEventListener('click', () => {
 let decoderChunks = []; // 存放切好的文本碎片
 let decoderCurrentIndex = 0; // 当前处理到第几个碎片
 let decoderIsRunning = false;
+let decoderLastTimestamp = Date.now(); // 新增：用来记住上一次切片的时间
 
 const txtUpload = document.getElementById('memoryTxtUpload');
 const consolePanel = document.getElementById('decoderConsole');
@@ -14322,15 +14321,16 @@ txtUpload.addEventListener('change', async (e) => {
         appendDecoderLog(`读取成功！总字符数: ${fullText.length}`);
         
         // 核心切片逻辑：每 2500 字切一块，保证不爆 Token，同时保留一点重叠部分防断章取义
-        const CHUNK_SIZE = 4000;
+        const CHUNK_SIZE = 8000;
         decoderChunks = [];
         for (let i = 0; i < fullText.length; i += CHUNK_SIZE) {
             decoderChunks.push(fullText.substring(i, i + CHUNK_SIZE));
         }
         
         decoderCurrentIndex = 0;
-        statusText.innerText = "就绪";
-        progressText.innerText = `0 / ${decoderChunks.length} 碎片`;
+decoderLastTimestamp = Date.now(); // 新增：新文件重置记忆时间
+statusText.innerText = "就绪";
+progressText.innerText = `0 / ${decoderChunks.length} 碎片`;
         progressBar.style.width = "0%";
         
         appendDecoderLog(`分卷切片完成，共切分出 [ ${decoderChunks.length} ] 块碎片。`, "#4CAF50");
@@ -14419,18 +14419,18 @@ async function processNextChunk() {
         }
     }
 
-    // 终极融合版：客观史书风 + 第三人称上帝视角 + 关键词触发
+    // 终极融合版：第一人称上帝视角 + 关键词触发 + 智能时间侦探
     const sysPrompt = `你是一个无感情的客观记忆提取模块。用户将提供一段历史聊天记录切片。
 任务：寻找其中有没有【重大剧情转折、信物交换、重要约定、关键情报/雷区】。
 要求：
 1. 如果这段全是无意义的日常水文、纯废话，请只输出一个字：【无】。
-2. 视角与称呼：必须以【第三人称（上帝视角）】进行客观记录。指代NPC角色时必须使用真实名字【${charName}】，指代玩家时必须使用【${playerName}】。绝对不要代入任何角色的主观第一人称！
-3. 绝对客观：只记录发生了什么、双方表达了什么、重要约定和物品。剥离一切情绪描写、环境渲染或小说式的修辞，精炼紧凑。
-4. 字数严格控制在100-400字内。
-5. 必须为你提取的剧情打上你认为合适个数的核心触发关键词（作为以后的唤醒钥匙），格式必须严格如下：
-[关键词1,关键词2] 这里是提取的客观剧情摘要内容。
+2. 视角与称呼（极度重要）：哪怕聊天记录中没有写明名字，你也必须清楚这是【你】和【玩家】的对话！必须以【第一人称（“我”）】视角记录，这里的“我”代表【${charName}】（你自己）。指代玩家时，必须使用对方的名字【${playerName}】。绝对禁止搞反人称！
+3. 时间侦探：请侦测这段记录里有没有出现真实的日期（如 2023-05-12，或 2023年5月12日）。如果有，请提取出来；如果没有发现日期，请填“延续”。
+4. 绝对客观：只记录发生了什么、双方表达了什么。剥离一切情绪描写或小说式的修辞。字数控制在100-400字内。
+5. 必须为你提取的剧情打上合适的触发关键词，格式必须严格如下：
+[日期:YYYY-MM-DD或延续] [关键词1,关键词2] 这里是提取的客观剧情摘要内容。
 示例：
-[怀表,废弃工厂] ${playerName}和${charName}在废弃工厂探险时，发现了一枚生锈的怀表。`;
+[日期:2023-12-25] [怀表,废弃工厂] ${playerName}和我一起在废弃工厂探险时，发现了一枚生锈的怀表。`;
 
     try {
         const res = await fetch(`${apiUrl.replace(/\/$/, '')}/chat/completions`, {
@@ -14460,21 +14460,32 @@ async function processNextChunk() {
         if (reply === '【无】' || reply === '无' || reply.includes('[无]')) {
             appendDecoderLog(`[碎片 ${currentIndexDisp}] 纯日常，已丢弃`, "#757575");
         } else {
-            // 解析出关键词和内容存入数据库
-            const match = reply.match(/\[(.*?)\]\s*(.*)/);
+            // 解析出时间、关键词和内容
+            const match = reply.match(/\[日期:(.*?)\]\s*\[(.*?)\]\s*(.*)/);
             if (match) {
-                const keywords = match[1].trim(); // 比如：下雪,约定
-                const text = match[2].trim();     // 比如：我们在冬天约定了一起去看雪。
+                const dateStr = match[1].trim();
+                const keywords = match[2].trim();
+                const text = match[3].trim();
+                
+                // 如果AI找到了时间，尝试转换成时间戳
+                if (dateStr !== '延续' && dateStr !== '无') {
+                    // 做一个简单的容错，把中文年月替换成横杠，方便 JS 解析
+                    let cleanDateStr = dateStr.replace(/年|月/g, '-').replace(/日/g, '');
+                    let parsedTime = new Date(cleanDateStr).getTime();
+                    // 如果解析出来是有效时间，就更新全局的记忆时钟！
+                    if (!isNaN(parsedTime)) {
+                        decoderLastTimestamp = parsedTime;
+                    }
+                }
                 
                 // 将提取到的金矿，作为【已归档】的记忆卡片存入系统
                 let allMemories = await loadFromDB(`chat_memories_${contactId}`) || [];
-                // 注意这里存了一个特殊的 keyword 字段，方便后续聊天触发
                 allMemories.push({ 
                     id: Date.now() + currentIndexDisp, 
                     content: `[旧日关键词: ${keywords}] ${text}`, 
-                    timestamp: Date.now(), 
-                    isArchived: true, // ★强制归档状态，平时绝对不占用Token！
-                    triggerKeys: keywords // 隐藏的触发钥匙
+                    timestamp: decoderLastTimestamp, // ★使用时间侦探找到的时间，而不是今天的Date.now()！
+                    isArchived: true, 
+                    triggerKeys: keywords 
                 });
                 await saveToDB(`chat_memories_${contactId}`, allMemories);
                 
@@ -14618,7 +14629,7 @@ document.getElementById('castOutlineBtn').addEventListener('click', async functi
 3. 包含要素：按逻辑或时间线总结发生过的主要事件、关系的发展阶段、双方的核心态度、重要约定与信物。写明时间。
 4. 篇幅：不要省略重要细节，但要剥离废话。
 5. 格式：直接输出正文，分段清晰，绝对不要输出任何标题和多余的寒暄。
-6. 字数控制在3500内。`;
+6. 不要省略重要剧情和约定，字数控制在 6000 字以内。`;
 
         try {
             const res = await fetch(`${apiUrl.replace(/\/$/, '')}/chat/completions`, {
