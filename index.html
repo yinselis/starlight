@@ -14758,7 +14758,7 @@ if (fragmentsText.length > 10000) {
             let startDate = new Date(targetMems[0].timestamp).toLocaleDateString().replace(/\//g, '.');
             let endDate = new Date(targetMems[targetMems.length - 1].timestamp).toLocaleDateString().replace(/\//g, '.');
 
-            const sysPrompt = `你是一个无感情的档案整理模块。用户将提供一段时期的【历史事件碎片】（从 ${startDate} 到 ${endDate}）。
+            let sysPrompt = `你是一个无感情的档案整理模块。用户将提供一段时期的【历史事件碎片】（从 ${startDate} 到 ${endDate}）。
 任务：请根据这些碎片，整理并梳理出一份清晰、平实的【阶段性剧情总结大纲】。
 
 【核心要求】：
