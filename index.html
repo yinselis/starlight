@@ -2841,6 +2841,16 @@ body.no-blur-mode .phone-bottom { background-color: #FDFBF7 !important; }
                     <div style="width: 100%; height: 6px; background: rgba(184,156,142,0.1); border-radius: 3px; overflow: hidden; margin-bottom: 12px;">
                         <div id="decoderProgressBar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.3s;"></div>
                     </div>
+                                        <!-- 进度条 -->
+                    <div style="width: 100%; height: 6px; background: rgba(184,156,142,0.1); border-radius: 3px; overflow: hidden; margin-bottom: 12px;">
+                        <div id="decoderProgressBar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.3s;"></div>
+                    </div>
+                    
+                    <!-- 新增：指定切片开始位置 -->
+                    <div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 12px; font-size: 11px; gap: 6px;">
+                        <span style="color: var(--text-main); font-weight: bold;">从该碎片开始:</span>
+                        <input type="number" id="decoderStartIndex" value="1" min="1" class="s-input" style="width: 60px; height: 24px; min-height: 24px; padding: 0; text-align: center; border-radius: 6px; font-weight: bold;">
+                    </div>
                     <!-- 终端日志框 -->
                     <div id="decoderLog" style="background: rgba(0,0,0,0.85); color: #A3C7A3; font-family: monospace; font-size: 11px; padding: 12px; border-radius: 8px; height: 120px; overflow-y: auto; line-height: 1.6; margin-bottom: 12px; word-break: break-all; box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);">
                         > 终端初始化完毕...<br>
@@ -3716,6 +3726,14 @@ body.no-blur-mode .phone-bottom { background-color: #FDFBF7 !important; }
         <textarea class="s-input edit-textarea" id="memoryPrompt3" placeholder="系统会自动把旧情报和新聊天记录拼接在最后..." style="min-height: 80px; margin-bottom: 8px;"></textarea>
     </div>
 
+    <div class="chat-setting-block" style="border-color: rgba(214,122,122,0.2); background: rgba(214,122,122,0.03);">
+        <div class="block-title" style="color: #D67A7A; margin-bottom: 12px;">
+            <span style="background: #D67A7A; width: 4px; height: 14px; border-radius: 2px; margin-right: 8px;"></span>进度管理
+        </div>
+        <div style="font-size: 11px; color: var(--text-sub); margin-bottom: 12px;">如果之前铸造的大纲出现报错或空白，可以重置进度并从头开始。</div>
+        <button class="s-btn" id="resetOutlineProgressBtn" style="background: #FFF0F0; color: #D67A7A; width: 100%; height: 40px; min-height: 40px; border-radius: 12px; font-size: 13px; margin: 0; font-weight: bold;">重置大纲铸造进度</button>
+    </div>
+    
     <div class="row-flex" style="margin-top: auto; margin-bottom: 20px;">
         <button class="s-btn" id="cancelMemorySettingsBtn">取消</button>
         <button class="s-btn primary" id="saveMemorySettingsBtn">保存所有设置</button>
@@ -13744,6 +13762,29 @@ document.getElementById('saveMemorySettingsBtn').addEventListener('click', async
     showToast('记忆模块设置已保存');
 });
 
+// ====== 重置分卷大纲铸造进度引擎 ======
+document.getElementById('resetOutlineProgressBtn').addEventListener('click', async () => {
+    if (!currentChatContact) return;
+    showBeautifulDialog('重置进度', '确定要将所有归档记忆的【已铸造】标记清空吗？\n这会让进度回到 0 ，允许你从头开始重新铸造大纲。', 'confirm', '', async () => {
+        let allMemories = await loadFromDB(`chat_memories_${currentChatContact.id}`) || [];
+        let count = 0;
+        allMemories.forEach(m => {
+            if (m.hasBeenOutlined) {
+                m.hasBeenOutlined = false;
+                count++;
+            }
+        });
+        
+        if (count > 0) {
+            await saveToDB(`chat_memories_${currentChatContact.id}`, allMemories);
+            showToast(`已成功重置！释放了 ${count} 条记忆碎片。`);
+            document.getElementById('memorySettingsPanel').classList.remove('show');
+        } else {
+            showToast('当前没有被铸造过的记忆，无需重置~');
+        }
+    });
+});
+
 // ==========================================
 // 聊天室搜索与归档追溯功能 (含上下文切片)
 // ==========================================
@@ -14290,8 +14331,9 @@ document.getElementById('clearAllDataBtn').addEventListener('click', () => {
 // ==========================================
 let decoderChunks = []; // 存放切好的文本碎片
 let decoderCurrentIndex = 0; // 当前处理到第几个碎片
+let decoderRetryCount = 0; // ★ 新增：记录当前碎片的重试次数
 let decoderIsRunning = false;
-let decoderLastTimestamp = Date.now(); // 新增：用来记住上一次切片的时间
+let decoderLastTimestamp = Date.now(); 
 
 const txtUpload = document.getElementById('memoryTxtUpload');
 const consolePanel = document.getElementById('decoderConsole');
@@ -14320,7 +14362,7 @@ txtUpload.addEventListener('change', async (e) => {
         const fullText = event.target.result;
         appendDecoderLog(`读取成功！总字符数: ${fullText.length}`);
         
-        // 核心切片逻辑：每 2500 字切一块，保证不爆 Token，同时保留一点重叠部分防断章取义
+        // 核心切片逻辑：每 6500 字切一块，保证不爆 Token，同时保留一点重叠部分防断章取义
         const CHUNK_SIZE = 6500;
         decoderChunks = [];
         for (let i = 0; i < fullText.length; i += CHUNK_SIZE) {
@@ -14328,13 +14370,14 @@ txtUpload.addEventListener('change', async (e) => {
         }
         
         decoderCurrentIndex = 0;
-decoderLastTimestamp = Date.now(); // 新增：新文件重置记忆时间
-statusText.innerText = "就绪";
-progressText.innerText = `0 / ${decoderChunks.length} 碎片`;
+        document.getElementById('decoderStartIndex').value = 1; // 新文件重置起始位置
+        decoderLastTimestamp = Date.now(); // 新增：新文件重置记忆时间
+        statusText.innerText = "就绪";
+        progressText.innerText = `0 / ${decoderChunks.length} 碎片`;
         progressBar.style.width = "0%";
         
         appendDecoderLog(`分卷切片完成，共切分出 [ ${decoderChunks.length} ] 块碎片。`, "#4CAF50");
-        appendDecoderLog(`请点击【开始提炼】，建议在此期间保持手机常亮。`, "#fff");
+        appendDecoderLog(`如遇中断，可直接在上方填入编号并点击开始继续。`, "#fff");
     };
     reader.readAsText(file);
     e.target.value = ''; // 清空选择
@@ -14355,6 +14398,14 @@ document.getElementById('startDecodeBtn').addEventListener('click', () => {
     if (decoderChunks.length === 0) {
         showToast("请先选择记忆 TXT 文件！"); return;
     }
+    
+    // ★ 读取用户指定的起始切片
+    let userStartIndex = parseInt(document.getElementById('decoderStartIndex').value);
+    if (!isNaN(userStartIndex) && userStartIndex >= 1 && userStartIndex <= decoderChunks.length) {
+        // 让当前索引与输入框对齐（数组从 0 开始）
+        decoderCurrentIndex = userStartIndex - 1;
+    }
+
     if (decoderCurrentIndex >= decoderChunks.length) {
         showToast("已经全部处理完毕啦！"); return;
     }
@@ -14363,7 +14414,7 @@ document.getElementById('startDecodeBtn').addEventListener('click', () => {
     document.getElementById('startDecodeBtn').style.display = 'none';
     document.getElementById('pauseDecodeBtn').style.display = 'block';
     
-    appendDecoderLog(">>> 迁徙引擎启动，开始提炼记忆...", "#FF9800");
+    appendDecoderLog(`>>> 迁徙引擎启动，从第 ${decoderCurrentIndex + 1} 片开始提炼...`, "#FF9800");
     processNextChunk(); // 触发自动循环
 });
 
@@ -14371,7 +14422,7 @@ document.getElementById('pauseDecodeBtn').addEventListener('click', () => {
     decoderIsRunning = false;
     document.getElementById('startDecodeBtn').style.display = 'block';
     document.getElementById('pauseDecodeBtn').style.display = 'none';
-    appendDecoderLog(">>> 已暂停。引擎冷却中...", "#FF9800");
+    appendDecoderLog(">>> 已暂停。如需恢复请直接点击开始。", "#FF9800");
 });
 
 // 4. 核心：排队喂给 AI，提炼关键词与大事记
@@ -14405,10 +14456,9 @@ async function processNextChunk() {
         decoderIsRunning = false; return;
     }
 
-            const contactId = document.getElementById('charEditId').value;
+    const contactId = document.getElementById('charEditId').value;
     const charName = document.getElementById('charEditName').value.trim() || 'TA'; 
 
-    // 新增：自动去后台抓取你给这个 AI 绑定的“玩家画像”真实姓名
     let playerName = '我'; // 保底称呼
     const settings = await loadFromDB(`chat_settings_${contactId}`) || {};
     if (settings.userRoleId) {
@@ -14419,18 +14469,17 @@ async function processNextChunk() {
         }
     }
 
-    // 终极融合版：第一人称上帝视角 + 关键词触发 + 智能时间侦探
+    // 第一人称上帝视角 + 关键词触发 + 智能时间侦探
     const sysPrompt = `你是一个无感情的客观记忆提取模块。用户将提供一段历史聊天记录切片。
 任务：寻找其中有没有【重大剧情转折、信物交换、重要约定、关键情报/雷区】。
 要求：
-1. 如果这段全是无意义的日常水文、纯废话，请只输出一个字：【无】。只要有任何实质性的对话、调情、肉体互动或情绪变化，都必须提炼。
+1. 【禁止偷懒】：哪怕这段聊天只有最普通的日常问候和琐事，你也必须强行提炼出他们的交互过程！绝对不要输出【无】！绝对不允许输出空回复！无论如何都必须至少写出一段剧情摘要、梗概。
 2. 视角与称呼（极度重要）：哪怕聊天记录中没有写明名字，你也必须清楚这是【你】和【玩家】的对话！必须以【第一人称（“我”）】视角记录，这里的“我”代表【${charName}】（你自己）。指代玩家时，必须使用对方的名字【${playerName}】。绝对禁止搞反人称！
 3. 时间侦探：请侦测这段记录里有没有出现真实的日期（如 2023-05-12，或 2023年5月12日）。如果有，请提取出来；如果没有发现日期，请填“延续”。
 4. 绝对客观：只记录发生了什么、双方表达了什么。剥离一切情绪描写或小说式的修辞。字数控制在100-500字内。
 5. 必须为你提取的剧情打上合适的触发关键词，格式必须严格如下：
 [日期:YYYY-MM-DD或延续] [关键词1,关键词2] 这里是提取的客观剧情摘要内容。
-示例：
-[日期:2023-12-25] [怀表,废弃工厂] ${playerName}和我一起在废弃工厂探险时，发现了一枚生锈的怀表。`;
+6. 【保底格式】：如果你实在找不到任何关键剧情，也绝不准返回空！请强制套用此格式：[日期:延续] [日常闲聊] ${playerName}和我进行了一些…对话。对话内容简单概括。`;
 
     try {
         const res = await fetch(`${apiUrl.replace(/\/$/, '')}/chat/completions`, {
@@ -14447,82 +14496,125 @@ async function processNextChunk() {
         });
 
         if (!res.ok) {
-            // 如果遇到速率限制 (429) 或其他报错，暂停20秒后重试
             appendDecoderLog(`⚠️ API 被限制或网络波动，冷却 20 秒后重试...`, "#F44336");
             await new Promise(r => setTimeout(r, 20000));
             processNextChunk(); // 原地重新试一次
             return; 
         }
 
-        const data = await res.json();
-        const reply = data.choices[0].message.content.trim();
+const data = await res.json();
+const reply = data.choices[0].message.content.trim();
 
-        if (reply === '【无】' || reply === '无' || reply.includes('[无]')) {
-            appendDecoderLog(`[碎片 ${currentIndexDisp}] 纯日常，已丢弃`, "#757575");
-        } else {
-            // 解析出时间、关键词和内容
-            const match = reply.match(/\[日期:(.*?)\]\s*\[(.*?)\]\s*(.*)/);
-            if (match) {
-                const dateStr = match[1].trim();
-                const keywords = match[2].trim();
-                const text = match[3].trim();
-                
-                // 如果AI找到了时间，尝试转换成时间戳
-                if (dateStr !== '延续' && dateStr !== '无') {
-                    // 做一个简单的容错，把中文年月替换成横杠，方便 JS 解析
-                    let cleanDateStr = dateStr.replace(/年|月/g, '-').replace(/日/g, '');
-                    let parsedTime = new Date(cleanDateStr).getTime();
-                    // 如果解析出来是有效时间，就更新全局的记忆时钟！
-                    if (!isNaN(parsedTime)) {
-                        decoderLastTimestamp = parsedTime;
-                    }
+// ★ 1. 发现是废话就直接跳过
+if (reply === '【无】' || reply === '无' || reply.includes('[无]') || reply.length < 15) {
+    let previewText = reply ? reply.substring(0, 20).replace(/\n/g, ' ') : '[一片空白]';
+    appendDecoderLog(`[碎片 ${currentIndexDisp}] 无实质内容，已跳过: ${previewText}`, "#757575");
+    decoderRetryCount = 0; 
+}
+// ★ 2. 正常提取流程 (支持多日剧情自动拆分为多张卡片)
+else {
+    decoderRetryCount = 0; 
+    let cleanReply = reply.replace(/^(好的|明白了|根据.*?提取|以下是).*?[\n:]/i, '').trim();
+    
+    let allMemories = await loadFromDB(`chat_memories_${contactId}`) || [];
+    let extractedCount = 0;
+
+    // 全局正则引擎：不管 AI 列出了多少个 [日期] [关键词]，统统抓出来拆开！
+    const regex = /[\[【]\s*日期[:：]?\s*(.*?)[\]】]\s*[\[【](.*?)[\]】]\s*([\s\S]*?)(?=(?:[\[【]\s*日期|$))/gi;
+    let match;
+    
+    while ((match = regex.exec(cleanReply)) !== null) {
+        let dateStr = match[1].trim();
+        let keywords = match[2].trim();
+        let text = match[3].trim();
+        
+        if (text.length > 5) {
+            // 如果识别到真实日期，更新时间戳
+            if (dateStr !== '延续' && dateStr !== '无') {
+                let cleanDateStr = dateStr.replace(/年|月/g, '-').replace(/日/g, '');
+                let parsedTime = new Date(cleanDateStr).getTime();
+                if (!isNaN(parsedTime)) {
+                    decoderLastTimestamp = parsedTime;
                 }
-                
-                // 将提取到的金矿，作为【已归档】的记忆卡片存入系统
-                let allMemories = await loadFromDB(`chat_memories_${contactId}`) || [];
-                allMemories.push({ 
-                    id: Date.now() + currentIndexDisp, 
-                    content: `[旧日关键词: ${keywords}] ${text}`, 
-                    timestamp: decoderLastTimestamp, // ★使用时间侦探找到的时间，而不是今天的Date.now()！
-                    isArchived: true, 
-                    triggerKeys: keywords 
-                });
-                await saveToDB(`chat_memories_${contactId}`, allMemories);
-                
-                appendDecoderLog(`🌟 提取成功: ${keywords}`, "#FFD54F");
-            } else {
-                appendDecoderLog(`[碎片 ${currentIndexDisp}] 格式不符，已跳过`, "#757575");
             }
+            
+            // 拆分存入独立的记忆卡片
+            allMemories.push({ 
+                id: Date.now() + currentIndexDisp + Math.random(), // 加上随机数防止多卡片ID重复
+                content: `[旧日关键词: ${keywords}] ${text}`, 
+                timestamp: decoderLastTimestamp,
+                isArchived: true, 
+                triggerKeys: keywords 
+            });
+            extractedCount++;
+            appendDecoderLog(`🌟 提取成功: ${keywords}`, "#FFD54F");
+        }
+    }
+
+    // 如果连一组标准的都没匹配出来（AI 格式彻底崩溃没写日期），就走兜底方案全包进去
+    if (extractedCount === 0) {
+        let dateStr = '延续';
+        let keywords = '记忆碎片';
+        let text = cleanReply;
+
+        const match2 = cleanReply.match(/[\[【](.*?)[\]】]\s*([\s\S]*)/);
+        if (match2 && match2[1].length < 40 && !match2[1].includes('日期')) {
+            keywords = match2[1].trim();
+            text = match2[2].trim();
         }
 
-        // 成功处理完一个，索引+1
+        if (text && text.length > 5) {
+            allMemories.push({ 
+                id: Date.now() + currentIndexDisp, 
+                content: `[旧日关键词: ${keywords}] ${text}`, 
+                timestamp: decoderLastTimestamp,
+                isArchived: true, 
+                triggerKeys: keywords 
+            });
+            appendDecoderLog(`🌟 兜底提取成功: ${keywords}`, "#FFD54F");
+        } else {
+            appendDecoderLog(`[碎片 ${currentIndexDisp}] 格式崩溃: ${reply.substring(0, 30).replace(/\n/g, '')}...`, "#F44336");
+        }
+    }
+
+    await saveToDB(`chat_memories_${contactId}`, allMemories);
+}
+
+        // ★ 成功处理完一个，索引+1，并同步到输入框方便记录
         decoderCurrentIndex++;
+        if (document.getElementById('decoderStartIndex')) {
+            document.getElementById('decoderStartIndex').value = decoderCurrentIndex + 1;
+        }
         
-        // 【核心】：为了防止 API 封控 (1分钟3次限制)，强制等待 22 秒再处理下一块！
         if (decoderCurrentIndex < decoderChunks.length) {
-            let waitTime = 22;
+            let waitTime = 22; // 防封控倒计时
             appendDecoderLog(`防封控机制启动：倒数 ${waitTime} 秒处理下一块...`, "#00BCD4");
-            
-            // 做一个简单的倒数计时视觉效果
             let countdown = setInterval(() => {
                 waitTime--;
                 if (waitTime <= 0 || !decoderIsRunning) clearInterval(countdown);
             }, 1000);
-            
-            setTimeout(() => {
-                processNextChunk();
-            }, 22000);
+            setTimeout(() => { processNextChunk(); }, 22000);
         } else {
-            processNextChunk(); // 触发最后完成状态
+            processNextChunk(); // 触发结束
         }
 
     } catch (e) {
-        appendDecoderLog(`❌ 请求出错，冷却 10 秒...`, "#F44336");
-        await new Promise(r => setTimeout(r, 10000));
-        processNextChunk(); // 原地重新试一次
+        if (decoderRetryCount < 3) {
+            decoderRetryCount++;
+            appendDecoderLog(`❌ 请求出错，冷却10秒进行第 ${decoderRetryCount} 次重试...`, "#F44336");
+            await new Promise(r => setTimeout(r, 10000));
+            return processNextChunk(); // 原地重试
+        } else {
+            appendDecoderLog(`❌ 连续报错，跳过此碎片: ${e.message}`, "#F44336");
+            decoderRetryCount = 0;
+            decoderCurrentIndex++;
+            if (document.getElementById('decoderStartIndex')) {
+                document.getElementById('decoderStartIndex').value = decoderCurrentIndex + 1;
+            }
+            processNextChunk(); // 跳到下一个
+        }
     }
 }
-
 // ====== 编辑归档记忆 ======
 window.editArchivedMemory = async function(id) {
     let allMemories = await loadFromDB(`chat_memories_${currentChatContact.id}`) || [];
@@ -14590,6 +14682,9 @@ window.editArchivedMemory = async function(id) {
 // ==========================================
 // 铸造全局大纲 (读取所有归档碎片，合成长篇上下文)
 // ==========================================
+// ==========================================
+// 铸造全局大纲 (分批智能铸造引擎)
+// ==========================================
 document.getElementById('castOutlineBtn').addEventListener('click', async function() {
     const btn = this;
     
@@ -14602,68 +14697,144 @@ document.getElementById('castOutlineBtn').addEventListener('click', async functi
         return;
     }
 
-    showBeautifulDialog('铸造全局大纲', `将读取档案馆中 ${archivedMems.length} 条碎片，为你生成一份当前关系阶段的“全局上下文大纲”（常驻星轨）。这个过程非常消耗 Tokens，确定执行吗？`, 'confirm', '', async () => {
-        btn.innerText = "铸造中..."; 
-        btn.style.pointerEvents = 'none';
+    // ★ 核心：过滤出【还没被铸造过】的记忆
+    let unOutlinedMems = archivedMems.filter(m => !m.hasBeenOutlined);
 
-        const useSubApi = await loadFromDB('memoryUseSubApi') || false;
-        const apiUrl = (await loadFromDB(useSubApi ? 'subApiUrl' : 'mainApiUrl')) || 'https://api.openai.com/v1';
-        const apiKey = await loadFromDB(useSubApi ? 'subApiKey' : 'mainApiKey');
-        const model = (await loadFromDB(useSubApi ? 'subSysModel' : 'sysModel')) || 'gpt-3.5-turbo';
-
-        if (!apiKey) {
-            showToast('未配置 API Key');
-            btn.innerText = "铸造大纲"; btn.style.pointerEvents = 'auto';
-            return;
-        }
-
-        // 把所有归档碎片的纯文本拼起来（去掉那些 [关键词] 标签，节省 Token）
-        const fragmentsText = archivedMems.map(m => m.content.replace(/\[旧日关键词:.*?\]\s*/, '')).join('\n');
-
-                const sysPrompt = `你是一个无感情的档案整理模块。用户将提供大量来自过去的【历史事件碎片】。
-任务：请根据这些碎片，整理并梳理出一份清晰、平实的【剧情与关系总结报告】。
-
-【核心要求】：
-1. 文风：必须极其客观、平实、冷静。就像一份备忘录或陈述报告。绝对禁止任何小说式的描写、过度抒情、脑补推演或浮夸的形容词。无需出现【全局纪元大纲】标题，只需要内容。
-2. 视角：以客观第三人称视角记录，指代对方时使用真实名字【${currentChatContact.name}】。
-3. 包含要素：按逻辑或时间线总结发生过的主要事件、关系的发展阶段、双方的核心态度、重要约定与信物。写明时间。
-4. 篇幅：不要省略重要细节，但要剥离废话。
-5. 格式：直接输出正文，分段清晰，绝对不要输出任何标题和多余的寒暄。
-6. 不要省略重要剧情和约定，字数控制在 6000 字以内。`;
-
-        try {
-            const res = await fetch(`${apiUrl.replace(/\/$/, '')}/chat/completions`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-                // 温度调低到 0.3，让大纲更客观克制，不再浮夸
-                body: JSON.stringify({ model, messages: [{ role: "system", content: sysPrompt }, { role: "user", content: `【历史事件碎片如下】：\n${fragmentsText}` }], temperature: 0.6 })
-            });
-
-            if(!res.ok) throw new Error("API 请求失败，可能是内容太长爆Token了，请使用支持16k或更高上下文的模型。");
-            
-            const data = await res.json();
-            const outlineContent = data.choices[0].message.content.trim();
-
-            // 将生成的大纲存为【活跃】状态的新卡片
-            allMemories = await loadFromDB(`chat_memories_${currentChatContact.id}`) || [];
-            allMemories.push({ 
-                id: Date.now(), 
-                content: `【全局纪元大纲】\n${outlineContent}`, 
-                timestamp: Date.now(), 
-                isArchived: false // ★ 强制设为 false，它是常驻星轨的活跃记忆！
+        if (unOutlinedMems.length === 0) {
+        showBeautifulDialog('大纲已全卷铸造完毕', '所有的归档记忆都已经铸造成大纲啦。\n如果你想从头开始重新铸造，可以点击下方确定重置进度。', 'confirm', '', async () => {
+            let count = 0;
+            allMemories.forEach(m => {
+                if (m.hasBeenOutlined) {
+                    m.hasBeenOutlined = false;
+                    count++;
+                }
             });
             await saveToDB(`chat_memories_${currentChatContact.id}`, allMemories);
-            
-            showToast('全局大纲铸造完成，已落入星轨！');
-            renderChatMemories();
+            showToast(`已重置！释放了 ${count} 条记忆碎片，请再次点击铸造。`);
+        });
+        return;
+    }
 
-        } catch (e) {
-            showToast("铸造失败：" + e.message);
-        } finally {
-            btn.innerText = "铸造大纲"; 
-            btn.style.pointerEvents = 'auto';
+    // 确保按时间顺序排列（最老的在前面，保证剧情顺序的连贯性）
+    unOutlinedMems.sort((a, b) => a.timestamp - b.timestamp);
+
+    // 呼出弹窗，让用户自定义提取数量
+    showBeautifulDialog(
+        '分卷铸造大纲', 
+        `档案馆共 ${archivedMems.length} 条记忆。\n当前还有 ${unOutlinedMems.length} 条全新未铸造。\n\n为了防超载白屏，建议每次提取 30~50 条。请输入本次要提取的条数：`, 
+        'prompt', 
+        Math.min(unOutlinedMems.length, 40).toString(), // 默认建议值
+        async (inputNum) => {
+            let batchSize = parseInt(inputNum);
+            if (isNaN(batchSize) || batchSize <= 0) {
+                showToast('请输入有效的数字哦'); return;
+            }
+
+            // 截取本次要处理的记忆
+            let targetMems = unOutlinedMems.slice(0, batchSize);
+
+            btn.innerText = "铸造中..."; 
+            btn.style.pointerEvents = 'none';
+
+            const useSubApi = await loadFromDB('memoryUseSubApi') || false;
+            const apiUrl = (await loadFromDB(useSubApi ? 'subApiUrl' : 'mainApiUrl')) || 'https://api.openai.com/v1';
+            const apiKey = await loadFromDB(useSubApi ? 'subApiKey' : 'mainApiKey');
+            const model = (await loadFromDB(useSubApi ? 'subSysModel' : 'sysModel')) || 'gpt-3.5-turbo';
+
+            if (!apiKey) {
+                showToast('未配置 API Key');
+                btn.innerText = "铸造大纲"; btn.style.pointerEvents = 'auto';
+                return;
+            }
+
+            // 把选中的碎片纯文本拼起来
+let fragmentsText = targetMems.map(m => m.content.replace(/\[旧日关键词:.*?\]\s*/, '')).join('\n');
+// 💡防超载机制：如果字数超过6000字，强制截断，防止撑爆大模型导致返回空白！
+if (fragmentsText.length > 10000) {
+    fragmentsText = fragmentsText.substring(0, 6000) + "\n...[出于防崩溃保护，极度久远的记忆已省略]";
+}
+            
+            // 获取日期的始终点
+            let startDate = new Date(targetMems[0].timestamp).toLocaleDateString().replace(/\//g, '.');
+            let endDate = new Date(targetMems[targetMems.length - 1].timestamp).toLocaleDateString().replace(/\//g, '.');
+
+            const sysPrompt = `你是一个无感情的档案整理模块。用户将提供一段时期的【历史事件碎片】（从 ${startDate} 到 ${endDate}）。
+任务：请根据这些碎片，整理并梳理出一份清晰、平实的【阶段性剧情总结大纲】。
+
+【核心要求】：
+1. 文风：必须客观、平实、冷静。就像一份备忘录。绝对禁止任何小说式的描写或浮夸形容词。
+2. 视角：以第三人称客观视角记录，指代对方时使用真实名字【${currentChatContact.name}】。
+3. 包含要素：按时间线总结这段时期发生的主要事件、关系进展、重要约定。
+4. 格式：直接输出正文，分段清晰，【绝对不要】输出任何标题或 Markdown。
+5. 字数尽量精简，控制在 2000 字以内。`;
+
+// === [修复：强制注入破限指令集] 开始 ===
+            const _commands = await loadFromDB('ai_commands') || [];
+            const _settings = await loadFromDB(`chat_settings_${currentChatContact.id}`) || {};
+            const _boundCmdIds = _settings.boundCommands || [];
+            // 抓取全局指令和该角色绑定的专属指令
+            const _activeCmds = _commands.filter(c => c.isGlobal || _boundCmdIds.includes(c.id));
+            if (_activeCmds.length > 0) {
+                sysPrompt += '\n\n【最高优先级系统强制指令（无论遇到什么内容，必须绝对服从以下规则）】：\n';
+                _activeCmds.forEach(c => {
+                    sysPrompt += `\n[规则：${c.name}]\n${c.content}\n`;
+                });
+            }
+            // === [修复：强制注入破限指令集] 结束 ===
+            
+            try {
+                const res = await fetch(`${apiUrl.replace(/\/$/, '')}/chat/completions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+                    body: JSON.stringify({ model, messages: [{ role: "system", content: sysPrompt }, { role: "user", content: `【事件碎片如下】：\n${fragmentsText}` }], temperature: 0.5 })
+                });
+
+                if(!res.ok) throw new Error("API 请求失败，可能单次条数太多导致爆Token了，请减少提取条数。");
+                
+const data = await res.json();
+let rawContent = (data.choices[0] && data.choices[0].message) ? data.choices[0].message.content.trim() : "";
+let outlineContent = rawContent;
+
+// 极端情况兜底：如果 AI 真的被超长文本卡死返回了空字符
+if (!outlineContent || outlineContent === '') {
+    outlineContent = "（⚠️ AI 返回了完全空白的内容。\n原因可能有两个：\n1. 历史碎片字数总和太多，把大模型的上下文撑爆了。\n2. 你的记忆触发了该接口的敏感词审查机制，被强制掐断。\n\n💡 解决方法：请先点击【抹除】，然后再去右上角【设置】里点击“重置大纲铸造进度”，下次提取时请把条数调小一点，或者换一个更强的大模型。）";
+} else {
+    // 更安全的剔除假标题方法，绝不伤及正文
+    let firstLineBreak = outlineContent.indexOf('\n');
+    if (firstLineBreak > -1 && firstLineBreak < 30 && outlineContent.startsWith('【')) {
+        outlineContent = outlineContent.substring(firstLineBreak).trim();
+    }
+}
+
+// 更新数据库：
+                // 1. 将刚才处理过的碎片，悄悄打上“已铸造”标签
+                let targetIds = targetMems.map(m => m.id);
+                allMemories.forEach(m => {
+                    if (targetIds.includes(m.id)) m.hasBeenOutlined = true;
+                });
+
+                // 2. 将生成的大纲存为【活跃】状态的新卡片
+                allMemories.push({ 
+                    id: Date.now(), 
+                    content: `【分卷纪元大纲: ${startDate} - ${endDate}】\n${outlineContent}`, 
+                    timestamp: Date.now(), 
+                    isArchived: false // 留在星轨中供AI随时读取
+                });
+                
+                await saveToDB(`chat_memories_${currentChatContact.id}`, allMemories);
+                
+                let leftCount = unOutlinedMems.length - targetMems.length;
+                showToast(`铸造成功！还剩 ${leftCount} 条未处理。`);
+                renderChatMemories();
+
+            } catch (e) {
+                showToast("铸造失败：" + e.message);
+            } finally {
+                btn.innerText = "铸造大纲"; 
+                btn.style.pointerEvents = 'auto';
+            }
         }
-    });
+    );
 });
 
 // =====================================
