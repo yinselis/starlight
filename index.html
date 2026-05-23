@@ -3672,12 +3672,13 @@ body.no-blur-mode .phone-bottom { background-color: #FDFBF7 !important; }
     
     <div class="mem-top-bar" style="position: relative; z-index: 1;">
         <div id="closeMemoryPanelBtn" style="width:42px; height:42px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.8); border-radius:50%; cursor:pointer; box-shadow:0 6px 16px rgba(128,118,110,0.06); color:var(--text-sub); transition: 0.2s;"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></div>
-        <div style="display: flex; gap: 10px;">
-            <div id="castOutlineBtn" class="mem-nav-btn" style="background: rgba(184,156,142,0.15); color: var(--accent);">铸造大纲</div>
-            <div id="openMemorySettingsBtn" class="mem-nav-btn" style="background: rgba(150,143,137,0.1); color: var(--text-sub);">设置</div>
-            <div id="openPrefsPanelBtn" class="mem-nav-btn">镜中回像</div>
-        </div>
-    </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; padding-left: 20px;">
+    <div id="castOutlineBtn" class="mem-nav-btn" style="background: rgba(184,156,142,0.15); color: var(--accent);">铸造大纲</div>
+    <div id="exportUnoutlinedBtn" class="mem-nav-btn" style="background: rgba(150,143,137,0.1); color: var(--text-sub);">导出碎片</div>
+    <div id="openMemorySettingsBtn" class="mem-nav-btn" style="background: rgba(150,143,137,0.1); color: var(--text-sub);">设置</div>
+    <div id="openPrefsPanelBtn" class="mem-nav-btn">镜中回像</div>
+</div>
+</div>
     
     <div style="margin-bottom: 16px; padding-left: 4px; position: relative; z-index: 1;">
         <div class="mem-art-title">记忆星轨</div>
@@ -3686,15 +3687,17 @@ body.no-blur-mode .phone-bottom { background-color: #FDFBF7 !important; }
     
     <!-- 悬浮操作区：改为左右错落的横向排版 -->
     <div class="mem-floating-actions">
-        <div class="mem-float-btn left-btn" id="extractMemoryNowBtn">
-            <div class="mem-float-icon"></div>
-            <div class="mem-float-text">沉淀此刻</div>
-        </div>
-        <div class="mem-float-btn right-btn" id="refineMemoryBtn">
-            <div class="mem-float-icon"></div>
-            <div class="mem-float-text">萃取星辉</div>
-        </div>
+    <div class="mem-float-btn left-btn" id="extractMemoryNowBtn">
+        <div class="mem-float-icon"></div>
+        <div class="mem-float-text">沉淀此刻</div>
     </div>
+    <div class="mem-float-btn right-btn" id="refineMemoryBtn">
+        <div class="mem-float-icon"></div>
+        <div class="mem-float-text">萃取星辉</div>
+    </div>
+</div>
+<!-- 新增手动添加记忆按钮 -->
+<div id="manualAddMemoryBtn" style="text-align: center; margin-bottom: 20px; font-size: 13px; font-weight: bold; color: var(--accent); cursor: pointer; padding: 10px; background: rgba(184,156,142,0.1); border-radius: 16px; border: 1.5px dashed rgba(184,156,142,0.3); position: relative; z-index: 1;">+ 复制外部大纲后，点击此处手动添加</div>
     
     <div id="memoryListArea" style="flex:1; overflow-y:auto; padding-bottom:40px; scrollbar-width: none; position: relative; z-index: 1;"></div>
 </div>
@@ -14680,10 +14683,69 @@ window.editArchivedMemory = async function(id) {
 };
 
 // ==========================================
+// 导出未铸造碎片 & 手动添加记忆 (手动大纲补丁)
+// ==========================================
+document.getElementById('exportUnoutlinedBtn').addEventListener('click', async function() {
+    if (!currentChatContact) return;
+    let allMemories = await loadFromDB(`chat_memories_${currentChatContact.id}`) || [];
+    let archivedMems = allMemories.filter(m => m.isArchived);
+    let unOutlinedMems = archivedMems.filter(m => !m.hasBeenOutlined);
+
+    if (unOutlinedMems.length === 0) {
+        showToast('当前没有未铸造的归档碎片哦~');
+        return;
+    }
+
+    // 按时间顺序拼好所有碎片
+    unOutlinedMems.sort((a, b) => a.timestamp - b.timestamp);
+    let fragmentsText = unOutlinedMems.map(m => m.content.replace(/\[旧日关键词:.*?\]\s*/, '')).join('\n\n');
+    
+    // 生成 txt 并触发下载
+    const blob = new Blob([fragmentsText], { type: "text/plain;charset=utf-8" });
+    const fileName = `${currentChatContact.name}_未铸造记忆碎片.txt`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    
+    showToast(`成功导出 ${unOutlinedMems.length} 条碎片！`);
+    
+    // 导出后自动询问，是否将这批碎片标记为“已铸造”，防止你下次再导重复了
+    setTimeout(() => {
+        showBeautifulDialog('标记进度', '碎片已下载！\n是否要将这批碎片标记为【已铸造】，以免下次重复导出？', 'confirm', '', async () => {
+            let targetIds = unOutlinedMems.map(m => m.id);
+            allMemories.forEach(m => {
+                if (targetIds.includes(m.id)) m.hasBeenOutlined = true;
+            });
+            await saveToDB(`chat_memories_${currentChatContact.id}`, allMemories);
+            showToast('已标记进度！');
+        });
+    }, 1500);
+});
+
+document.getElementById('manualAddMemoryBtn').addEventListener('click', () => {
+    if (!currentChatContact) return;
+    showBeautifulDialog('手动添加大纲/记忆', '请粘贴你用其他AI总结好的大纲或剧情：', 'prompt', '', async (text) => {
+        if (text && text.trim()) {
+            let allMemories = await loadFromDB(`chat_memories_${currentChatContact.id}`) || [];
+            allMemories.push({ 
+                id: Date.now(), 
+                content: text.trim(), 
+                timestamp: Date.now(), 
+                isArchived: false // 新加的手动内容直接作为活跃记忆
+            });
+            await saveToDB(`chat_memories_${currentChatContact.id}`, allMemories);
+            renderChatMemories();
+            showToast('手动添加记忆成功！');
+        }
+    });
+});
+
+// ==========================================
 // 铸造全局大纲 (读取所有归档碎片，合成长篇上下文)
-// ==========================================
-// ==========================================
-// 铸造全局大纲 (分批智能铸造引擎)
 // ==========================================
 document.getElementById('castOutlineBtn').addEventListener('click', async function() {
     const btn = this;
@@ -14700,7 +14762,7 @@ document.getElementById('castOutlineBtn').addEventListener('click', async functi
     // ★ 核心：过滤出【还没被铸造过】的记忆
     let unOutlinedMems = archivedMems.filter(m => !m.hasBeenOutlined);
 
-        if (unOutlinedMems.length === 0) {
+    if (unOutlinedMems.length === 0) {
         showBeautifulDialog('大纲已全卷铸造完毕', '所有的归档记忆都已经铸造成大纲啦。\n如果你想从头开始重新铸造，可以点击下方确定重置进度。', 'confirm', '', async () => {
             let count = 0;
             allMemories.forEach(m => {
@@ -14748,17 +14810,17 @@ document.getElementById('castOutlineBtn').addEventListener('click', async functi
             }
 
             // 把选中的碎片纯文本拼起来
-let fragmentsText = targetMems.map(m => m.content.replace(/\[旧日关键词:.*?\]\s*/, '')).join('\n');
-// 💡防超载机制：如果字数超过6000字，强制截断，防止撑爆大模型导致返回空白！
-if (fragmentsText.length > 10000) {
-    fragmentsText = fragmentsText.substring(0, 6000) + "\n...[出于防崩溃保护，极度久远的记忆已省略]";
-}
+            let fragmentsText = targetMems.map(m => m.content.replace(/\[旧日关键词:.*?\]\s*/, '')).join('\n');
+            // 防超载机制：截断过长的文本
+            if (fragmentsText.length > 10000) {
+                fragmentsText = fragmentsText.substring(0, 6000) + "\n...[出于防崩溃保护，极度久远的记忆已省略]";
+            }
             
             // 获取日期的始终点
             let startDate = new Date(targetMems[0].timestamp).toLocaleDateString().replace(/\//g, '.');
             let endDate = new Date(targetMems[targetMems.length - 1].timestamp).toLocaleDateString().replace(/\//g, '.');
 
-            let sysPrompt = `你是一个无感情的档案整理模块。用户将提供一段时期的【历史事件碎片】（从 ${startDate} 到 ${endDate}）。
+            let sysPrompt = `用户将提供一段时期的【历史事件碎片】（从 ${startDate} 到 ${endDate}）。
 任务：请根据这些碎片，整理并梳理出一份清晰、平实的【阶段性剧情总结大纲】。
 
 【核心要求】：
@@ -14768,19 +14830,18 @@ if (fragmentsText.length > 10000) {
 4. 格式：直接输出正文，分段清晰，【绝对不要】输出任何标题或 Markdown。
 5. 字数尽量精简，控制在 2000 字以内。`;
 
-// === [修复：强制注入破限指令集] 开始 ===
-            const _commands = await loadFromDB('ai_commands') || [];
-            const _settings = await loadFromDB(`chat_settings_${currentChatContact.id}`) || {};
-            const _boundCmdIds = _settings.boundCommands || [];
-            // 抓取全局指令和该角色绑定的专属指令
-            const _activeCmds = _commands.filter(c => c.isGlobal || _boundCmdIds.includes(c.id));
-            if (_activeCmds.length > 0) {
-                sysPrompt += '\n\n【最高优先级系统强制指令（无论遇到什么内容，必须绝对服从以下规则）】：\n';
-                _activeCmds.forEach(c => {
-                    sysPrompt += `\n[规则：${c.name}]\n${c.content}\n`;
-                });
-            }
-            // === [修复：强制注入破限指令集] 结束 ===
+            // === [修复：强制注入破限指令集] 开始 ===
+const _commands = await loadFromDB('ai_commands') || [];
+const _settings = await loadFromDB(`chat_settings_${currentChatContact.id}`) || {};
+const _boundCmdIds = _settings.boundCommands || [];
+const _activeCmds = _commands.filter(c => c.isGlobal || _boundCmdIds.includes(c.id));
+if (_activeCmds.length > 0) {
+    sysPrompt += '\n\n【最高优先级系统强制指令（无论遇到什么内容，必须绝对服从以下规则）】：\n';
+    _activeCmds.forEach(c => {
+        sysPrompt += `\n[规则：${c.name}]\n${c.content}\n`;
+    });
+}
+// === [修复：强制注入破限指令集] 结束 ===
             
             try {
                 const res = await fetch(`${apiUrl.replace(/\/$/, '')}/chat/completions`, {
@@ -14789,36 +14850,39 @@ if (fragmentsText.length > 10000) {
                     body: JSON.stringify({ model, messages: [{ role: "system", content: sysPrompt }, { role: "user", content: `【事件碎片如下】：\n${fragmentsText}` }], temperature: 0.5 })
                 });
 
-                if(!res.ok) throw new Error("API 请求失败，可能单次条数太多导致爆Token了，请减少提取条数。");
+                // 【不掩盖HTTP报错，强行抓取真实原因】
+                if (!res.ok) {
+                    const errText = await res.text();
+                    throw new Error(`HTTP状态码: ${res.status}\n详细报错:\n${errText}`);
+                }
                 
-const data = await res.json();
-let rawContent = (data.choices[0] && data.choices[0].message) ? data.choices[0].message.content.trim() : "";
-let outlineContent = rawContent;
+                const data = await res.json();
+                let rawContent = (data.choices && data.choices[0] && data.choices[0].message) ? data.choices[0].message.content : "";
+                
+                if (rawContent !== null) rawContent = rawContent.trim();
+                let outlineContent = rawContent;
 
-// 极端情况兜底：如果 AI 真的被超长文本卡死返回了空字符
-if (!outlineContent || outlineContent === '') {
-    outlineContent = "（⚠️ AI 返回了完全空白的内容。\n原因可能有两个：\n1. 历史碎片字数总和太多，把大模型的上下文撑爆了。\n2. 你的记忆触发了该接口的敏感词审查机制，被强制掐断。\n\n💡 解决方法：请先点击【抹除】，然后再去右上角【设置】里点击“重置大纲铸造进度”，下次提取时请把条数调小一点，或者换一个更强的大模型。）";
-} else {
-    // 更安全的剔除假标题方法，绝不伤及正文
-    let firstLineBreak = outlineContent.indexOf('\n');
-    if (firstLineBreak > -1 && firstLineBreak < 30 && outlineContent.startsWith('【')) {
-        outlineContent = outlineContent.substring(firstLineBreak).trim();
-    }
-}
+                // 【如果内容为空，把原始数据扔在屏幕上】
+                if (!outlineContent || outlineContent === '') {
+                    outlineContent = `【⚠️ API返回异常，抓取到的数据如下】：\n${JSON.stringify(data, null, 2)}`;
+                } else {
+                    let firstLineBreak = outlineContent.indexOf('\n');
+                    if (firstLineBreak > -1 && firstLineBreak < 30 && outlineContent.startsWith('【')) {
+                        outlineContent = outlineContent.substring(firstLineBreak).trim();
+                    }
+                }
 
-// 更新数据库：
-                // 1. 将刚才处理过的碎片，悄悄打上“已铸造”标签
+                // 更新数据库
                 let targetIds = targetMems.map(m => m.id);
                 allMemories.forEach(m => {
                     if (targetIds.includes(m.id)) m.hasBeenOutlined = true;
                 });
 
-                // 2. 将生成的大纲存为【活跃】状态的新卡片
                 allMemories.push({ 
                     id: Date.now(), 
                     content: `【分卷纪元大纲: ${startDate} - ${endDate}】\n${outlineContent}`, 
                     timestamp: Date.now(), 
-                    isArchived: false // 留在星轨中供AI随时读取
+                    isArchived: false 
                 });
                 
                 await saveToDB(`chat_memories_${currentChatContact.id}`, allMemories);
@@ -14828,7 +14892,16 @@ if (!outlineContent || outlineContent === '') {
                 renderChatMemories();
 
             } catch (e) {
-                showToast("铸造失败：" + e.message);
+                // 【网络直接崩溃时，强制生成一张错误卡片打印在屏幕上】
+                allMemories.push({ 
+                    id: Date.now(), 
+                    content: `【🚨接口调用崩溃日志】\n${e.message}`, 
+                    timestamp: Date.now(), 
+                    isArchived: false 
+                });
+                await saveToDB(`chat_memories_${currentChatContact.id}`, allMemories);
+                renderChatMemories();
+                showToast("发生严重报错！已将崩溃日志打印在屏幕上！");
             } finally {
                 btn.innerText = "铸造大纲"; 
                 btn.style.pointerEvents = 'auto';
