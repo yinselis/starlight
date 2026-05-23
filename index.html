@@ -14461,11 +14461,26 @@ async function processNextChunk() {
             appendDecoderLog(`[碎片 ${currentIndexDisp}] 纯日常，已丢弃`, "#757575");
         } else {
             // 解析出时间、关键词和内容
-            const match = reply.match(/\[日期:(.*?)\]\s*\[(.*?)\]\s*(.*)/);
-            if (match) {
-                const dateStr = match[1].trim();
-                const keywords = match[2].trim();
-                const text = match[3].trim();
+            // 终极高容错解析：兼容中英文括号、兼容乱换行、兼容AI忘记写日期
+let dateStr = '延续';
+let keywords = '';
+let text = '';
+
+const match1 = reply.match(/[\[【]日期[:：]\s*(.*?)[\]】]\s*[\[【](.*?)[\]】]\s*([\s\S]*)/);
+if (match1) {
+    dateStr = match1[1].trim();
+    keywords = match1[2].trim();
+    text = match1[3].trim();
+} else {
+    // 如果 AI 笨到忘了写日期，就尝试只抓取关键词和正文
+    const match2 = reply.match(/[\[【](.*?)[\]】]\s*([\s\S]*)/);
+    if (match2) {
+        keywords = match2[1].trim();
+        text = match2[2].trim();
+    }
+}
+
+if (keywords && text) {
                 
                 // 如果AI找到了时间，尝试转换成时间戳
                 if (dateStr !== '延续' && dateStr !== '无') {
