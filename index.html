@@ -13283,51 +13283,44 @@ window.triggerRpOpen = function() {
 // 赛博终端 - 记忆与情报系统核心逻辑
 // ==========================================
 
-// 1. 触发判断器 (修复版：支持群聊 + 彻底拦截并发重复总结)
-// 新增全局并发锁
+// 1. 触发判断器 (完美防丢失修复版)
 let isCheckingMemory = false;
 
-// 1. 触发判断器 (修复版：支持群聊 + 彻底拦截并发重复总结)
 async function checkAndTriggerMemorySummary(contactId) {
-    if (isCheckingMemory) return; // 如果正在总结中，直接拦截排队，防连环触发
+    if (isCheckingMemory) return; 
     isCheckingMemory = true;
     
     try {
         const settings = await loadFromDB(`chat_settings_${contactId}`) || {};
-        if (!settings.autoSummary) return; // 如果没开自动总结开关，直接退出
+        if (!settings.autoSummary) return;
 
         const history = await loadFromDB(`chat_history_${contactId}`) || [];
-        const threshold = settings.summaryMessages || 30; // 阈值
+        const threshold = settings.summaryMessages || 30; 
         let lastSummaryIndex = settings.lastSummaryIndex || 0; 
 
         if (history.length - lastSummaryIndex >= threshold) {
             console.log(`触发记忆提取机制！当前条数：${history.length}，上次总结节点：${lastSummaryIndex}`);
             
-            // 【核心修复】：在发起网络请求前，立刻马上把标记点更新到数据库！
             const currentLength = history.length;
-            settings.lastSummaryIndex = currentLength;
-            await saveToDB(`chat_settings_${contactId}`, settings);
 
-            // 获取联系人信息，判断是否是群聊
             const contacts = await loadFromDB('chat_contacts') || [];
             const contactInfo = contacts.find(c => c.id === contactId);
             const isGroup = contactInfo && contactInfo.isGroup;
             const contactName = contactInfo ? contactInfo.name : 'TA';
 
-            // 截取这段时间内的聊天记录
             const msgsToSummarize = history.slice(lastSummaryIndex, currentLength);
             
-            // 拼接上下文
             const recentChat = msgsToSummarize.map(m => {
                 let speaker = m.role === 'user' ? '我' : (m.speakerName || contactName);
                 return `${speaker}: ${m.content}`;
             }).join('\n');
             
-            // 异步并发执行：提取记忆卡片 
-            generateChatMemory(contactId, recentChat, contactName, 0, isGroup);
+            // 【核心修复1】：加上 await 彻底锁死进程，让大模型慢慢算，防止期间用户疯狂聊天导致连环并发！
+            // 【核心修复2】：将 currentLength 传进去，只要大模型返回成功，在 generateChatMemory 内部推进进度！
+            await generateChatMemory(contactId, recentChat, contactName, currentLength, isGroup);
         }
     } finally {
-        isCheckingMemory = false; // 无论成功失败，最后释放锁
+        isCheckingMemory = false; // 大模型返回（无论成功失败）后，才释放锁
     }
 }
 
