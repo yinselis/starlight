@@ -10517,9 +10517,7 @@ else preText = purePreviewText;
 await updateContactPreview(contactId, preText);
 // == 替换结束 ==
 
-        // ★ 新增：AI 发送完消息后，悄悄在后台检查是否需要总结记忆
-        checkAndTriggerMemorySummary(contactId);
-
+ 
         }
         
 hideTyping(); // 所有的消息连发完毕后，彻底隐藏正在输入气泡
@@ -11054,9 +11052,10 @@ let timeHtml = `<div class="chat-time-stamp" ${['voice', 'redpacket', 'location'
             else area.insertAdjacentHTML('beforeend', newRowHtml);
             
             area.scrollTop = area.scrollHeight;
-            await updateContactPreview(contactId, `${speakerName}: ${cleanText}`);
-        }
+                    await updateContactPreview(contactId, `${speakerName}: ${cleanText}`);
+    }
 hideTyping();
+checkAndTriggerMemorySummary(contactId); // <--- 在第11057行下面，加上这一句补上即可！
     } catch (e) {
         hideTyping();
         showToast("群聊引擎报错：" + e.message);
@@ -12123,7 +12122,11 @@ document.getElementById('saveChatSettingsBtn').addEventListener('click', async (
     const activeRoleChip = document.querySelector('#chatSettingsUserRoleChips .acc-chip.active');
     const activeCmdChips = Array.from(document.querySelectorAll('#chatSettingsCommandChips .acc-chip.active')).map(c => c.dataset.id);
     
-        let settings = {
+    // 【核心修复】：先读取老配置，防止把系统后台用来防重复的进度标记（如 lastSummaryIndex）给搞丢了！
+    const oldSettings = await loadFromDB(`chat_settings_${currentChatContact.id}`) || {};
+
+    let settings = {
+        ...oldSettings, // 继承保留所有的后台隐形数据
         userRoleId: activeRoleChip ? activeRoleChip.dataset.id : '',
         boundCommands: activeCmdChips, 
         
@@ -12131,9 +12134,9 @@ document.getElementById('saveChatSettingsBtn').addEventListener('click', async (
         replyCount: document.getElementById('chatReplyCount').value.trim(),
         contextCount: parseInt(document.getElementById('chatContextCount').value) || 15,
         autoSummary: document.getElementById('chatAutoSummaryToggle').checked,
-                summaryMessages: parseInt(document.getElementById('chatSummaryMessages').value) || 30,
+        summaryMessages: parseInt(document.getElementById('chatSummaryMessages').value) || 30,
         hideQuickBar: !document.getElementById('chatQuickBarToggle').checked,
-bilingual: document.getElementById('chatBilingualToggle').checked
+        bilingual: document.getElementById('chatBilingualToggle').checked
     };
 
     await saveToDB(`chat_settings_${currentChatContact.id}`, settings);
@@ -13281,40 +13284,50 @@ window.triggerRpOpen = function() {
 // ==========================================
 
 // 1. 触发判断器 (修复版：支持群聊 + 彻底拦截并发重复总结)
+// 新增全局并发锁
+let isCheckingMemory = false;
+
+// 1. 触发判断器 (修复版：支持群聊 + 彻底拦截并发重复总结)
 async function checkAndTriggerMemorySummary(contactId) {
-    const settings = await loadFromDB(`chat_settings_${contactId}`) || {};
-    if (!settings.autoSummary) return; // 如果没开自动总结开关，直接退出
+    if (isCheckingMemory) return; // 如果正在总结中，直接拦截排队，防连环触发
+    isCheckingMemory = true;
+    
+    try {
+        const settings = await loadFromDB(`chat_settings_${contactId}`) || {};
+        if (!settings.autoSummary) return; // 如果没开自动总结开关，直接退出
 
-    const history = await loadFromDB(`chat_history_${contactId}`) || [];
-    const threshold = settings.summaryMessages || 30; // 阈值，默认30条
-    let lastSummaryIndex = settings.lastSummaryIndex || 0; 
+        const history = await loadFromDB(`chat_history_${contactId}`) || [];
+        const threshold = settings.summaryMessages || 30; // 阈值
+        let lastSummaryIndex = settings.lastSummaryIndex || 0; 
 
-    if (history.length - lastSummaryIndex >= threshold) {
-        console.log(`触发记忆提取机制！当前条数：${history.length}，上次总结节点：${lastSummaryIndex}`);
-        
-        // 【核心修复】：在发起网络请求前，立刻马上把标记点更新到数据库！
-        // 防止因为请求延迟期间 AI 正在连发气泡，导致瞬间触发无数个重复的总结请求！
-        const currentLength = history.length;
-        settings.lastSummaryIndex = currentLength;
-        await saveToDB(`chat_settings_${contactId}`, settings);
+        if (history.length - lastSummaryIndex >= threshold) {
+            console.log(`触发记忆提取机制！当前条数：${history.length}，上次总结节点：${lastSummaryIndex}`);
+            
+            // 【核心修复】：在发起网络请求前，立刻马上把标记点更新到数据库！
+            const currentLength = history.length;
+            settings.lastSummaryIndex = currentLength;
+            await saveToDB(`chat_settings_${contactId}`, settings);
 
-        // 获取联系人信息，判断是否是群聊
-        const contacts = await loadFromDB('chat_contacts') || [];
-        const contactInfo = contacts.find(c => c.id === contactId);
-        const isGroup = contactInfo && contactInfo.isGroup;
-        const contactName = contactInfo ? contactInfo.name : 'TA';
+            // 获取联系人信息，判断是否是群聊
+            const contacts = await loadFromDB('chat_contacts') || [];
+            const contactInfo = contacts.find(c => c.id === contactId);
+            const isGroup = contactInfo && contactInfo.isGroup;
+            const contactName = contactInfo ? contactInfo.name : 'TA';
 
-        // 截取这段时间内的聊天记录
-        const msgsToSummarize = history.slice(lastSummaryIndex, currentLength);
-        
-        // 拼接上下文
-        const recentChat = msgsToSummarize.map(m => {
-            let speaker = m.role === 'user' ? '我' : (m.speakerName || contactName);
-            return `${speaker}: ${m.content}`;
-        }).join('\n');
-        
-        // 异步并发执行：提取记忆卡片 (传入 0 代表里面不需要再更新节点了，我们在外面已经光速更新完毕)
-        generateChatMemory(contactId, recentChat, contactName, 0, isGroup);
+            // 截取这段时间内的聊天记录
+            const msgsToSummarize = history.slice(lastSummaryIndex, currentLength);
+            
+            // 拼接上下文
+            const recentChat = msgsToSummarize.map(m => {
+                let speaker = m.role === 'user' ? '我' : (m.speakerName || contactName);
+                return `${speaker}: ${m.content}`;
+            }).join('\n');
+            
+            // 异步并发执行：提取记忆卡片 
+            generateChatMemory(contactId, recentChat, contactName, 0, isGroup);
+        }
+    } finally {
+        isCheckingMemory = false; // 无论成功失败，最后释放锁
     }
 }
 
