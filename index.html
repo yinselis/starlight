@@ -10197,11 +10197,32 @@ if (data.usage) {
 let reply = data.choices[0].message.content.trim();
 reply = reply.replace(/\[\d{1,2}月\d{1,2}日 \d{1,2}:\d{2}\]\s*/g, '');
         
-// === 新增修复：防止引用和功能框被大模型意外换行切碎 ===
+// === 终极防粘连切分逻辑 (完美兼容笨模型) ===
 const safeReply = reply.replace(/(\[(QUOTE|LOCATION|REDPACKET|VOICE|DIARY_INVITE):.*?\])\s*\n+/gi, '$1 ');
 
-// 按换行符拆分，去除空行
-const lines = safeReply.split('\n').map(s => s.trim()).filter(s => s !== '');
+let lines = [];
+
+// 1. 如果模型听话，使用了 [气泡] 标记，就用气泡标记来切西瓜
+if (safeReply.includes('[气泡]')) {
+    lines = safeReply.split(/\[气泡\]/).map(s => s.trim()).filter(s => s !== '');
+} 
+// 2. 如果模型完全不听话，没打标记，甚至连换行都不打（大段落粘连发病期）
+else {
+    // 先尝试按普通的换行切一下
+    lines = safeReply.split('\n').map(s => s.trim()).filter(s => s !== '');
+    
+    // 【终极防线】：如果切完之后只有1条，且字数很长(大于30字)，说明模型吐了一大坨文字！
+    // 此时触发强制标点切分大法，强行把它切成微信短句！
+    if (lines.length === 1 && lines[0].length > 30) {
+        // 在句号、感叹号、问号、波浪号后面强制切开（保留标点符号）
+        let forceSplitRegex = /([^。！？~…]+[。！？~…]+)/g;
+        let matched = lines[0].match(forceSplitRegex);
+        if (matched && matched.length > 1) {
+            lines = matched.map(s => s.trim()).filter(s => s !== '');
+        }
+    }
+}
+// ============================================
 
 // 模拟真人发微信，根据字数动态延迟，一条一条连发！
 for (let i = 0; i < lines.length; i++) {
@@ -11213,15 +11234,15 @@ const memoryText = activeMemories.length > 0 ? `\n【往期剧情与重要记忆
     
     const bilingualText = document.getElementById('chatBilingualToggle').checked ? `\n8. 【最高强制指令 - 翻译思维链】：每次输出前，请先在内部逻辑中执行“语言属性检测”：1. 确认即将输出的句子是否包含英语、日语、粤语等非普通话。2. 若包含，必须在含有外语/方言的句末，附加严格格式的翻译。格式必须且只能是：[译: 标准普通话翻译]。严禁自创格式（如(翻译: xxx)、[EN: xxx]）！示例：What a beautiful day! [译: 今天天气真不错！]` : '';
     let replyCountText = '';
-    const rCount = tempSettings.replyCount || '';
-    if (rCount === '') {
-        replyCountText = `\n7. 【强硬要求】：请根据语境自由决定回复的条数（连续发送多条短句）。请务必使用换行符分隔每条消息。`;
-    } else if (rCount.includes('-')) {
-        let parts = rCount.split('-');
-        replyCountText = `\n7. 【强硬要求】：你必须一次性连续发送 ${parts[0].trim()} 到 ${parts[1].trim()} 条短句消息。请务必使用换行符分隔。`;
-    } else {
-        replyCountText = `\n7. 【强硬要求】：你必须一次性连续发送 ${rCount.trim()} 条短句消息。请务必使用换行符分隔。`;
-    }
+const rCount = tempSettings.replyCount || '';
+if (rCount === '') {
+    replyCountText = `\n7. 【强制气泡分割规则】：为了模拟真实的微信连续多条短消息，**你说的每一句话、每一个动作都必须单起一行，并且开头必须加上 [气泡] 两个字！** \n示例：\n[气泡]你在干嘛呢？\n[气泡]我今天好累哦\n[气泡]*伸了个懒腰*\n绝对禁止把所有话连在一起写成一大段！`;
+} else if (rCount.includes('-')) {
+    let parts = rCount.split('-');
+    replyCountText = `\n7. 【强制气泡分割规则】：你必须一次性连续发送 ${parts[0].trim()} 到 ${parts[1].trim()} 条短消息。**每一条消息必须单起一行，并且开头加上 [气泡] 两个字！**\n示例：\n[气泡]第一句话\n[气泡]第二句话\n绝对禁止把所有话连在一起写！`;
+} else {
+    replyCountText = `\n7. 【强制气泡分割规则】：你必须一次性连续发送 ${rCount.trim()} 条短消息。**每一条消息必须单起一行，并且开头加上 [气泡] 两个字！**`;
+}
     
             const sysPrompt = `你现在是一个有血有肉的真实人类：${role ? role.name : '神秘人'}。请彻底忘掉你是AI程序。
 【你的设定资料】：${role ? role.prompt : ''}${userProfileText}${prefsText}${memoryText}${frontCmdText}
@@ -12261,15 +12282,15 @@ const memoryText = (activeMemories.length > 0 || awakenedMemories.length > 0)
     }
     const bilingualText = settings.bilingual ? `\n8. 【最高强制指令 - 翻译思维链】：每次输出前，请先在内部逻辑中执行“语言属性检测”：1. 确认即将输出的句子是否包含英语、日语、粤语等非普通话。2. 若包含，必须在含有外语/方言的句末，附加严格格式的翻译。格式必须且只能是：[译: 标准普通话翻译]。严禁自创格式（如(翻译: xxx)、[EN: xxx]）！示例：What a beautiful day! [译: 今天天气真不错！]` : '';
     let replyCountText = '';
-    const rCount = settings.replyCount || '';
-    if (rCount === '') {
-        replyCountText = `\n7. 【强硬要求】：请根据语境自由决定回复的条数（连续发送多条短句）。请务必使用换行符分隔每条消息。`;
-    } else if (rCount.includes('-')) {
-        let parts = rCount.split('-');
-        replyCountText = `\n7. 【强硬要求】：你必须一次性连续发送 ${parts[0].trim()} 到 ${parts[1].trim()} 条短句消息。请务必使用换行符分隔。`;
-    } else {
-        replyCountText = `\n7. 【强硬要求】：你必须一次性连续发送 ${rCount.trim()} 条短句消息。请务必使用换行符分隔。`;
-    }
+const rCount = settings.replyCount || '';
+if (rCount === '') {
+    replyCountText = `\n7. 【强制气泡分割规则】：为了模拟真实的微信连续多条短消息，**你说的每一句话、每一个动作都必须单起一行，并且开头必须加上 [气泡] 两个字！** \n示例：\n[气泡]你在干嘛呢？\n[气泡]我今天好累哦\n[气泡]*伸了个懒腰*\n绝对禁止把所有话连在一起写成一大段！`;
+} else if (rCount.includes('-')) {
+    let parts = rCount.split('-');
+    replyCountText = `\n7. 【强制气泡分割规则】：你必须一次性连续发送 ${parts[0].trim()} 到 ${parts[1].trim()} 条短消息。**每一条消息必须单起一行，并且开头加上 [气泡] 两个字！**\n示例：\n[气泡]第一句话\n[气泡]第二句话\n绝对禁止把所有话连在一起写！`;
+} else {
+    replyCountText = `\n7. 【强制气泡分割规则】：你必须一次性连续发送 ${rCount.trim()} 条短消息。**每一条消息必须单起一行，并且开头加上 [气泡] 两个字！**`;
+}
     
     // 时间感知与消息间隔逻辑
     const now = new Date();
