@@ -2648,6 +2648,29 @@ body.no-blur-mode .phone-bottom { background-color: #FDFBF7 !important; }
 </div>
             <button class="s-btn danger" id="clearAllDataBtn" style="width: 100%; margin: 0;">恢复出厂设置</button>
         </div>
+        <!-- ================= 新增：后台耗费API盲盒总开关 ================= -->
+<div class="setting-card" style="margin-bottom: 24px; border: 1.5px dashed #D67A7A; background: rgba(214,122,122,0.03);">
+    <div class="block-title" style="color: #D67A7A; margin-bottom: 12px;">
+        <span style="background: #D67A7A; width: 4px; height: 14px; border-radius: 2px; margin-right: 8px;"></span>后台盲盒 (耗费API)
+    </div>
+    
+    <div class="tower-row" style="margin-bottom: 12px; padding: 12px; border-radius: 16px;">
+        <div>
+            <div class="tower-title" style="font-size: 13px;">邮筒盲盒 (错寄信件)</div>
+            <div class="tower-desc" style="font-size: 10px;">每天打开网页可能收到随机时空信件</div>
+        </div>
+        <label class="switch"><input type="checkbox" id="globalWrongMailToggle"><span class="slider"></span></label>
+    </div>
+
+    <div class="tower-row" style="margin-bottom: 0; padding: 12px; border-radius: 16px;">
+        <div>
+            <div class="tower-title" style="font-size: 13px;">TA 的后台日记</div>
+            <div class="tower-desc" style="font-size: 10px;">每天打开网页TA可能偷偷写日记</div>
+        </div>
+        <label class="switch"><input type="checkbox" id="globalAutoDiaryToggle"><span class="slider"></span></label>
+    </div>
+</div>
+<!-- ======================================================== -->
     <!-- 一键流畅模式开关 -->
 <div class="toggle-row">
     <div>
@@ -3705,7 +3728,16 @@ body.no-blur-mode .phone-bottom { background-color: #FDFBF7 !important; }
 <!-- === 记忆模块专属设置面板 === -->
 <div class="sub-panel" id="memorySettingsPanel" style="z-index: 670; background: var(--bg-color); padding-top: 6vh;">
     <div class="panel-header" style="margin-bottom: 20px;">记忆模块设置</div>
-    
+        <!-- 新增：省钱开关 -->
+    <div class="chat-setting-block">
+        <div class="tower-row" style="margin-bottom: 0; border: none; padding: 0;">
+            <div>
+                <div class="tower-title">自动提取“TA眼里的我”</div>
+                <div class="tower-desc">总结剧情时额外调用一次API提取情报，关闭可省钱</div>
+            </div>
+            <label class="switch"><input type="checkbox" id="autoExtractPrefsToggle"><span class="slider"></span></label>
+        </div>
+    </div>
     <div class="chat-setting-block">
         <div class="tower-row" style="margin-bottom: 0; border: none; padding: 0;">
             <div>
@@ -4267,9 +4299,12 @@ body.no-blur-mode .phone-bottom { background-color: #FDFBF7 !important; }
         <!-- 伴读聊天面板 -->
 <div class="read-chat-panel" id="readChatPanel">
     <div class="rc-header">
-        <span id="rcName">伴读助手</span>
+    <span id="rcName">伴读助手</span>
+    <div style="display:flex; gap:14px; align-items:center;">
+        <svg id="clearReadChatBtn" style="width:18px; height:18px; cursor:pointer; color:#D67A7A;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
         <svg id="closeReadChat" style="width:20px; height:20px; cursor:pointer;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
     </div>
+</div>
     <div class="rc-body" id="rcBody">
         <div class="rc-bubble rc-sys">长按书籍文字进行划线，我就可以专门为你解读这一句话哦~</div>
     </div>
@@ -5532,7 +5567,8 @@ async function loadSettings() {
     document.getElementById('mainApiKey').value = await loadFromDB('mainApiKey') || '';
     document.getElementById('subApiUrl').value = await loadFromDB('subApiUrl') || '';
     document.getElementById('subApiKey').value = await loadFromDB('subApiKey') || '';
-    
+    document.getElementById('globalWrongMailToggle').checked = (await loadFromDB('globalWrongMail') !== false); // 默认开启
+document.getElementById('globalAutoDiaryToggle').checked = (await loadFromDB('globalAutoDiary') !== false); // 默认开启
     const savedTemp = await loadFromDB('sysTemp');
     if (savedTemp) {
         document.getElementById('tempInput').value = savedTemp;
@@ -5598,6 +5634,8 @@ document.getElementById('saveConfigBtn').addEventListener('click', async functio
     await saveToDB('mainApiKey', document.getElementById('mainApiKey').value);
     await saveToDB('subApiUrl', document.getElementById('subApiUrl').value);
     await saveToDB('subApiKey', document.getElementById('subApiKey').value);
+    await saveToDB('globalWrongMail', document.getElementById('globalWrongMailToggle').checked);
+await saveToDB('globalAutoDiary', document.getElementById('globalAutoDiaryToggle').checked);
     await saveToDB('sysTemp', document.getElementById('tempInput').value);
     
     const mainModel = document.getElementById('mainModelSelect').value;
@@ -6998,6 +7036,10 @@ let saveDraftTimer = null;
 
 // ==== 自动触发错投信件的核心函数 ====
 async function triggerRandomWrongMail() {
+// === 拦截器：后台耗钱开关 ===
+const isWrongMailEnabled = await loadFromDB('globalWrongMail') !== false;
+if (!isWrongMailEnabled) return; // 开关关了，直接退出不花钱
+
     // --- 新增：每天只掷一次骰子机制 ---
 const todayStr = new Date().toLocaleDateString();
 const lastRollDate = await loadFromDB('lastWrongMailRollDate');
@@ -8466,6 +8508,10 @@ document.getElementById('closeDiarySettingsBtn').addEventListener('click', async
 
 // === 让 TA 偷偷写日记的后台随机触发逻辑 ===
 async function triggerAiAutoDiary() {
+// === 拦截器：后台耗钱总开关 ===
+const isGlobalAutoDiaryEnabled = await loadFromDB('globalAutoDiary') !== false;
+if (!isGlobalAutoDiaryEnabled) return; // 开关关了，直接退出不花钱
+
     // 1. 检查开关有没有打开
     const isAiAuto = await loadFromDB('diaryAiAutoToggle') || false;
     if (!isAiAuto) return; 
@@ -8992,10 +9038,14 @@ document.getElementById('readTextContainer').addEventListener('click', (e) => {
                     bindReadControls();
                 };
                 document.getElementById('quickAskSentenceBtn').onclick = () => {
-                    const textToSend = selectedParagraphs.join('\\n\\n');
-                    addUserReadingMessage('sentence', textToSend, selectedParagraphs.length);
-                    
-                    selectedParagraphs = [];
+    // 强制按书本原有的上下排列顺序获取段落，无视手指点击的先后顺序
+    const orderedElements = Array.from(document.querySelectorAll('#readPageText p.selected'));
+    const orderedTexts = orderedElements.map(p => p.innerText);
+    const textToSend = orderedTexts.join('\\n\\n');
+    
+    addUserReadingMessage('sentence', textToSend, orderedTexts.length);
+    
+    selectedParagraphs = [];
                     document.querySelectorAll('#readPageText p.selected').forEach(p => p.classList.remove('selected'));
                     readControlsBarEl.innerHTML = originalControlsHtml;
                     bindReadControls();
@@ -9123,7 +9173,7 @@ document.getElementById('closeReadCompanionBtn').addEventListener('click', () =>
 const floatBtn = document.getElementById('readFloatBtn');
 const chatPanel = document.getElementById('readChatPanel');
 
-function selectReadCompanion(id, name, avatarUrl) {
+async function selectReadCompanion(id, name, avatarUrl) {
     currentReadCompanionId = id;
     document.getElementById('readCompanionNameText').innerText = name;
     document.getElementById('rcName').innerText = name;
@@ -9140,6 +9190,8 @@ function selectReadCompanion(id, name, avatarUrl) {
         floatBtn.style.backgroundImage = `url(${avatarUrl})`;
         floatBtn.innerHTML = '';
     }
+    readChatHistoryForAi = await loadFromDB(`read_chat_history_${currentReadCompanionId}`) || [];
+if (window.renderReadChatHistory) window.renderReadChatHistory();
     companionPanel.classList.remove('show');
     showToast(`已邀请 ${name} 加入伴读`);
 }
@@ -9194,6 +9246,28 @@ function bindReadControls() {
     }
 }
 
+window.renderReadChatHistory = function() {
+    const rcBody = document.getElementById('rcBody');
+    rcBody.innerHTML = '<div class="rc-bubble rc-sys">长按书籍文字进行划线，我就可以专门为你解读这一句话哦~</div>';
+    readChatHistoryForAi.forEach(msg => {
+        if (msg.role === 'user') {
+            rcBody.insertAdjacentHTML('beforeend', `<div class="rc-bubble rc-me">${msg.displayContent || msg.content}</div>`);
+        } else if (msg.role === 'assistant') {
+            rcBody.insertAdjacentHTML('beforeend', `<div class="rc-bubble rc-ai">${msg.content}</div>`);
+        }
+    });
+    rcBody.scrollTop = rcBody.scrollHeight;
+};
+
+document.getElementById('clearReadChatBtn').addEventListener('click', () => {
+    showBeautifulDialog('清空共读记录', '确定要清空与当前伴读的讨论记录吗？', 'confirm', '', async () => {
+        readChatHistoryForAi = [];
+        await saveToDB(`read_chat_history_${currentReadCompanionId}`, readChatHistoryForAi);
+        window.renderReadChatHistory();
+        showToast('共读记录已清空');
+    });
+});
+
 // ==================== 全新共读聊天发送与接收引擎 ====================
 function addUserReadingMessage(type, textContent, count = 1) {
     chatPanel.classList.add('show');
@@ -9205,16 +9279,19 @@ function addUserReadingMessage(type, textContent, count = 1) {
         meMsg = `[分享了这页的内容，想听听你的看法]`;
         userPrompt = `我刚才读了这一页，内容是：\n"${textContent}"\n\n请针对这一页的情节、情感或文笔，发表一下你的看法或吐槽（保持日常聊天的语气，简短几句即可）。`;
     } else if (type === 'sentence') {
-        meMsg = `[重点划线了 ${count} 段话]：<br><span style="font-size:12px;opacity:0.8;">“${textContent}”</span><br>你能针对我划线的这些话讲讲吗？`;
-        userPrompt = `我刚刚重点划线了这 ${count} 段话：\n"${textContent}"\n\n请只针对我划线的这些话发表一下你的看法或见解，或者解答我的疑惑（保持日常聊天的语气，简短几句即可）。`;
-    } else {
-        meMsg = textContent;
+    // 把字面的 \n\n 替换为空格，隐藏换行符让气泡更美观
+    let displayContent = textContent.replace(/\\n\\n/g, ' '); 
+    meMsg = `[重点划线了 ${count} 段话]：<br><span style="font-size:12px;opacity:0.8;">“${displayContent}”</span>`;
+    userPrompt = `我刚刚重点划线了这 ${count} 段话：\n"${textContent}"\n\n请只针对我划线的这些话发表一下你的看法或见解，或者解答我的疑惑（保持日常聊天的语气，简短几句即可）。`;
+} else {
+    meMsg = textContent;
         userPrompt = `我正在看书，并且对你说：\n"${textContent}"\n\n请以伴读的身份和现在的看书语境回应我（保持日常聊天的语气，几句话即可）。`;
     }
 
     rcBody.insertAdjacentHTML('beforeend', `<div class="rc-bubble rc-me">${meMsg}</div>`);
     rcBody.scrollTop = rcBody.scrollHeight;
-    readChatHistoryForAi.push({ role: "user", content: userPrompt });
+    readChatHistoryForAi.push({ role: "user", content: userPrompt, displayContent: meMsg });
+saveToDB(`read_chat_history_${currentReadCompanionId}`, readChatHistoryForAi);
 }
 
 // 1. 发送本页
@@ -9268,18 +9345,20 @@ document.getElementById('readChatAiReplyBtn').addEventListener('click', async ()
 【你的设定资料】：${role.prompt}${chatContextText}
 
 【核心灵魂与伴读场景指令】：
-1. 场景感知：我们现在正待在一起，共同翻阅同一本书（书名《${bookTitle}》）。请在脑海中构建这个具体的物理场景——我们是靠在沙发上、并肩坐在桌前，还是在某个安静的角落？
-2. 动态性格与情感推演：请结合你的性格设定和我们的私聊氛围，思考你在这个场景下的真实状态。
-   - 你是真的对这本书感兴趣，还是只是因为我想看才陪我？
-   - 你对书中情节的看法，应该完全符合你的时代背景、文化认知和三观，绝不要为了迎合我而说好话，遇到不认同的地方可以直接反驳。
-   - 如果你不耐烦、觉得书很无聊，或者比起看书你更在意我，你可以自然地表现出来，甚至转移话题。
+1. 场景感知：我们正一起看同一本书（书名《${bookTitle}》）。请结合你的人设，自然地融入这个场景，不要刻意强调我们在看书。
+2. 动态性格与情感推演：
+   - 严格遵循你的核心性格设定。你对书中情节的看法，必须完全符合你的时代背景、三观和人设。
+   - 不要为了迎合我而说好话，遇到不认同的地方直接吐槽或反驳。如果你对书不感兴趣，可以自然地表现出无聊或转移话题。
 3. 拒绝“阅读理解”式回答：
-   - 绝对禁止像AI一样输出结构化的书评、长篇大论的情感分析或中心思想总结！
-   - 你的回复应该像真人陪伴时一样：精炼、短促、口语化。可能只是一句随口的吐槽、一个共鸣的叹息，或者针对书上某句话的抬杠。
+   - 绝对禁止输出结构化的书评、长篇大论的情感分析或中心思想总结！
+   - 你的回复应该像日常微信私聊一样：精炼、短促、口语化。只是一句随口的吐槽、一个共鸣的叹息，或者针对书上某句话的抬杠。必须遵守你的人物性格设定，贴近角色。
 4. 动作与沉浸感：
-   - 允许使用星号包裹轻微的伴读动作或神态描写来增加沉浸感（例如：*凑过来看了一眼*、*打了个哈欠*、*指着书上的某行字*），但不要喧宾夺主。
-5. 绝对禁止的雷区：绝不允许说教、升华主题、给出完美的人生建议！不允许有任何AI的机器感、礼貌感和翻译腔！
-6. 所有行为、话语、态度都必须遵循人物性格核心，允许适度发散，但必须以人物的性格特征为主。`;
+   - 允许使用星号包裹轻微的动作神态（例如：*凑过来看了一眼*、*打了个哈欠*），但要极其克制，不要喧宾夺主。
+5. 绝对禁止的雷区（最高优先级）：
+   - 绝对禁止任何过度撩拨、油腻情话、霸道总裁语录或矫情做作的表达！
+   - 绝不许动不动就邪魅一笑、深情凝视或强行制造暧昧氛围！
+   - 绝不允许说教、升华主题或给出人生建议。
+   - 就像平时日常聊天一样，保持你原有的性格底色，平实、自然、随意。`;
         }
     }
         
@@ -9291,7 +9370,7 @@ document.getElementById('readChatAiReplyBtn').addEventListener('click', async ()
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
             body: JSON.stringify({
                 model, 
-                messages: [ { role: "system", content: sysPrompt }, ...readChatHistoryForAi ], 
+                messages: [ { role: "system", content: sysPrompt }, ...(readChatHistoryForAi.slice(-15).map(m => ({role: m.role, content: m.content}))) ], 
                 temperature: 0.85
             })
         });
@@ -9300,7 +9379,7 @@ document.getElementById('readChatAiReplyBtn').addEventListener('click', async ()
         document.getElementById(loadId).innerText = reply;
         
         readChatHistoryForAi.push({ role: "assistant", content: reply });
-        if (readChatHistoryForAi.length > 10) readChatHistoryForAi = readChatHistoryForAi.slice(-10);
+saveToDB(`read_chat_history_${currentReadCompanionId}`, readChatHistoryForAi);
     } catch (e) {
         document.getElementById(loadId).innerText = '抱歉，我的思绪断开了...';
     }
@@ -13411,9 +13490,12 @@ async function generateChatMemory(contactId, chatText, realName, currentHistoryL
             await saveToDB(`chat_settings_${contactId}`, settings);
         }
         
-        // 单聊才提取【TA眼中的我】(群聊人太多，提取偏好容易混乱，直接跳过)
+                // 单聊才提取【TA眼中的我】(群聊人太多，提取偏好容易混乱，直接跳过)
         if (!isGroup) {
-            extractUserPreferences(contactId, chatText);
+            const isAutoPrefs = await loadFromDB('autoExtractPrefs') !== false;
+            if (isAutoPrefs) {
+                extractUserPreferences(contactId, chatText);
+            }
         }
 
     } catch (e) {
@@ -13770,6 +13852,7 @@ modal.classList.add('show');
 document.getElementById('openMemorySettingsBtn').addEventListener('click', async () => {
     // 读取副API开关
     document.getElementById('memoryApiToggle').checked = await loadFromDB('memoryUseSubApi') || false;
+    document.getElementById('autoExtractPrefsToggle').checked = (await loadFromDB('autoExtractPrefs') !== false); 
     // 读取自定义提示词
     document.getElementById('memoryPrompt1').value = await loadFromDB('memoryPrompt1') || '';
     document.getElementById('memoryPrompt2').value = await loadFromDB('memoryPrompt2') || '';
@@ -13784,6 +13867,7 @@ document.getElementById('cancelMemorySettingsBtn').addEventListener('click', () 
 
 document.getElementById('saveMemorySettingsBtn').addEventListener('click', async () => {
     await saveToDB('memoryUseSubApi', document.getElementById('memoryApiToggle').checked);
+    await saveToDB('autoExtractPrefs', document.getElementById('autoExtractPrefsToggle').checked);
     await saveToDB('memoryPrompt1', document.getElementById('memoryPrompt1').value.trim());
     await saveToDB('memoryPrompt2', document.getElementById('memoryPrompt2').value.trim());
     await saveToDB('memoryPrompt3', document.getElementById('memoryPrompt3').value.trim());
