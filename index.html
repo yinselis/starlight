@@ -10756,9 +10756,28 @@ if (stickerRules.length > 0) {
 }
 // ===================================================
 
+    // ===================================================
+
+    // ★★★ 核心修复：把指令集（世界书/规则）和双语翻译开关正式接入群聊！ ★★★
+    const commands = await loadFromDB('ai_commands') || [];
+    const boundCmdIds = settings.boundCommands || [];
+    const activeCmds = commands.filter(c => c.isGlobal || boundCmdIds.includes(c.id));
+    
+    let frontCmdText = '';
+    let backCmdText = '';
+    if (activeCmds.length > 0) {
+        activeCmds.forEach(c => {
+            if (c.position === 'back') backCmdText += `\n【附加指令 - ${c.name}】：\n${c.content}`;
+            else frontCmdText += `\n【附加设定 - ${c.name}】：\n${c.content}`;
+        });
+    }
+
+    const bilingualText = settings.bilingual ? `\n8. 【最高强制指令 - 翻译思维链】：每次输出前，请先在内部逻辑中执行“语言属性检测”：1. 确认即将输出的句子是否包含英语、日语、粤语等非普通话。2. 若包含，必须在含有外语/方言的句末，附加严格格式的翻译。格式必须且只能是：[译: 标准普通话翻译]。严禁自创格式（如(翻译: xxx)、[EN: xxx]）！示例：What a beautiful day! [译: 今天天气真不错！]` : '';
+
     const sysPrompt = `你是一个多角色群聊推演引擎。正在模拟的群聊是：【${contactInfo.name}】。
 【群内角色名单与设定】：
 ${memberDesc}
+${frontCmdText}
 
 【核心推演与意识指令】：
 1. 群里的每个人都是有独立生活、情绪波动的真实人类。在发言前，请先深度检索该角色的国籍、时代与文化背景。ta的母语是什么？请自动且坚定地使用符合ta背景的语言、方言或专属口癖，拒绝被统一的现代普通话同化。
@@ -10772,7 +10791,8 @@ ${replyCountText.replace(/^\d+\.\s*/, '')}
 6. 若角色的性格和当前情绪决定了ta要禁言某人（且ta拥有群主/管理员权限），单起一行输出：[禁言:对方名字:秒数]理由。【警告：必须根据角色的愤怒/开玩笑程度，亲自决定具体秒数(如300, 3600, 86400等，永久填0)】。只能禁言下级普通群员。
 7. 绝对不要使用 JSON！严格遵守纯文本格式输出：
    - 每一个独立的气泡之间必须用 === 分隔。
-   - 每一个气泡的第一行必须是你指定的发言人的名字，用中括号括起来，例如：[张三]。第二行开始是正文内容。`;
+   - 每一个气泡的第一行必须是你指定的发言人的名字，用中括号括起来，例如：[张三]。第二行开始是正文内容。${bilingualText}
+${backCmdText}`;
 
 // 改造 1：不要直接 join 成纯文本，而是组装成多模态支持的数组
 let finalUserContent = [{ type: "text", text: "最近的群聊记录如下：\n" }];
