@@ -2470,6 +2470,44 @@ body.no-blur-mode .phone-bottom { background-color: #FDFBF7 !important; }
 #readSelectTooltip { position: fixed; background: var(--accent); color: #fff; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: bold; box-shadow: 0 4px 12px rgba(184,156,142,0.4); z-index: 200; pointer-events: none; opacity: 0; transition: 0.2s; transform: translate(-50%, -10px); }
 #readSelectTooltip.show { opacity: 1; pointer-events: auto; }
 
+/* AI文字假图专属卡片（无气泡版） */
+.fake-img-card {
+    width: 200px;
+    height: 140px;
+    background: #EAE6DF; /* 替换掉刺眼的白底，用温柔的灰色模拟无图片质感 */
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 16px;
+    box-sizing: border-box;
+    box-shadow: inset 0 2px 8px rgba(0,0,0,0.03);
+    margin: 2px 0;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(184, 156, 142, 0.15);
+}
+.fake-img-card svg {
+    width: 32px;
+    height: 32px;
+    stroke: rgba(184, 156, 142, 0.5);
+    margin-bottom: 8px;
+    flex-shrink: 0;
+}
+.fake-img-desc {
+    font-size: 11px;
+    color: var(--text-sub);
+    text-align: center;
+    line-height: 1.5;
+    width: 100%;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-weight: 600;
+}
+
 </style>
 </head>
 <body>
@@ -9873,6 +9911,7 @@ msgsToRender.forEach(msg => {
         let innerTimeHtml = `<div class="chat-time-stamp" style="margin: 0 4px; align-self: flex-end; padding-bottom: 2px;">${tStr}</div>`;
         
         let formattedMsgContent = (msg.content || '').replace(/\[(?:译|翻译|EN|En|Eng)[:：]\s*([\s\S]*?)\]/gi, '<div class="bilingual-trans">$1</div>');
+formattedMsgContent = formattedMsgContent.replace(/\[图片[:：]\s*([\s\S]*?)\]/gi, '<div class="fake-img-card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div class="fake-img-desc">$1</div></div>');
 
         formattedMsgContent = formattedMsgContent.replace(/[\(（]【?发送了?表情包[:：]?\s*(.*?)】?[\)）]/g, '[表情包:$1]');
         formattedMsgContent = formattedMsgContent.replace(/\[\[STICKER:(.*?)\]\]/gi, '[表情包:$1]');
@@ -9896,6 +9935,14 @@ msgsToRender.forEach(msg => {
             const sticker = allStickers.find(s => s.name === stickerMatch[1].trim());
             if (sticker) { isPureSticker = true; stickerUrl = sticker.url; }
         }
+
+let isPureFakeImg = false;
+let fakeImgDesc = '';
+const fakeImgMatch = (msg.content || '').match(/^\[图片[:：]\s*([\s\S]*?)\]$/i);
+if (fakeImgMatch) {
+    isPureFakeImg = true;
+    fakeImgDesc = fakeImgMatch[1].trim();
+}
 
         let contentHtml = '';
         let bubbleStyle = '';
@@ -9972,9 +10019,12 @@ msgsToRender.forEach(msg => {
     `;
     bubbleStyle = `class="chat-special-bubble"`;
         } else if (isPureSticker) {
-            contentHtml = `<img src="${stickerUrl}" style="width: 120px; height: 120px; object-fit: cover; border-radius: 18px; background: transparent; display: block; margin: 2px 0;">`;
-            bubbleStyle = `class="chat-special-bubble"`;
-        } else if (msg.imageUrl) {
+    contentHtml = `<img src="${stickerUrl}" style="width: 120px; height: 120px; object-fit: cover; border-radius: 18px; background: transparent; display: block; margin: 2px 0;">`;
+    bubbleStyle = `class="chat-special-bubble"`;
+} else if (isPureFakeImg) {
+    contentHtml = `<div class="fake-img-card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div class="fake-img-desc">${fakeImgDesc}</div></div>`;
+    bubbleStyle = `class="chat-special-bubble"`;
+} else if (msg.imageUrl) {
             contentHtml = `<img src="${msg.imageUrl}" style="max-width: 140px; border-radius: 12px; display: block; margin: 2px 0;">`;
             bubbleStyle = `class="chat-special-bubble"`;
         } else {
@@ -10440,6 +10490,7 @@ if (i === 0) {
 let timeHtml = `<div class="chat-time-stamp" ${['voice', 'redpacket', 'location', 'diary_invite', 'forward_card'].includes(msgType) ? 'style="display:none;"' : ''}>${tStr}</div>`;
 let innerTimeHtml = `<div class="chat-time-stamp" style="margin: 0 4px; align-self: flex-end; padding-bottom: 2px;">${tStr}</div>`;
 let formattedCleanText = (cleanText || '').replace(/\[(?:译|翻译|EN|En|Eng)[:：]\s*([\s\S]*?)\]/gi, '<div class="bilingual-trans">$1</div>');
+formattedCleanText = formattedCleanText.replace(/\[图片[:：]\s*([\s\S]*?)\]/gi, '<div class="fake-img-card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div class="fake-img-desc">$1</div></div>');
 
 // 解析表情包
 const allStickerGroupsAPI = await loadFromDB('sticker_groups') || [];
@@ -10454,6 +10505,14 @@ if (stickerMatchAPI) {
         isPureStickerAPI = true;
         stickerUrlAPI = sticker.url;
     }
+}
+
+let isPureFakeImgAPI = false;
+let fakeImgDescAPI = '';
+const fakeImgMatchAPI = cleanText.match(/^\[图片[:：]\s*([\s\S]*?)\]$/i);
+if (fakeImgMatchAPI) {
+    isPureFakeImgAPI = true;
+    fakeImgDescAPI = fakeImgMatchAPI[1].trim();
 }
 
 // 【升级版容错拦截】
@@ -10568,8 +10627,10 @@ if (msgType === 'voice') {
     `;
     bubbleStyle = `class="chat-special-bubble"`;
 } else if (isPureStickerAPI) {
-    // 【核心】AI自己发的表情包也不带气泡
     contentHtml = `<img src="${stickerUrlAPI}" style="width: 120px; height: 120px; object-fit: cover; border-radius: 18px; background: transparent; display: block; margin: 2px 0;">`;
+    bubbleStyle = `class="chat-special-bubble"`;
+} else if (isPureFakeImgAPI) {
+    contentHtml = `<div class="fake-img-card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div class="fake-img-desc">${fakeImgDescAPI}</div></div>`;
     bubbleStyle = `class="chat-special-bubble"`;
 } else {
     contentHtml = formattedCleanText;
@@ -10787,7 +10848,7 @@ ${frontCmdText}
 3. 如果角色拥有(群主)或(管理员)标签，思考ta的性格是否喜欢滥用权力？会不会因为小事、吃醋或纯粹为了开玩笑而故意禁言别人？如果角色拥有表情包权限，思考ta的发图频率和风格。一切交互行为都必须符合该角色的人设底色！
 4. 真实群聊不需要每个人都像开会一样轮流发言！允许打错字、用语气词、互相拌嘴甚至争吵。多用口语化短句，如果话没说完，直接用换行符分隔，系统会切分成多条气泡连发。
 ${replyCountText.replace(/^\d+\.\s*/, '')}
-5. 想发语音格式：[VOICE:秒数]语音文字。发红包：[REDPACKET:金额]留言。发定位：[LOCATION:地点]留言。极低概率下想戳一戳某人，单起一行：[POKE:动作描述] (如: [POKE:张三揉了揉李四的脑袋])，严禁频繁使用！引用回复格式：[QUOTE:被引用的原话]回复。${stickerAiPrompt}
+5. 想发语音格式：[VOICE:秒数]语音文字。发送图片格式：[图片:图片画面的详细描述]。发红包：[REDPACKET:金额]留言。发定位：[LOCATION:地点]留言。极低概率下想戳一戳某人，单起一行：[POKE:动作描述] (如: [POKE:张三揉了揉李四的脑袋])，严禁频繁使用！引用回复格式：[QUOTE:被引用的原话]回复。${stickerAiPrompt}
 6. 若角色的性格和当前情绪决定了ta要禁言某人（且ta拥有群主/管理员权限），单起一行输出：[禁言:对方名字:秒数]理由。【警告：必须根据角色的愤怒/开玩笑程度，亲自决定具体秒数(如300, 3600, 86400等，永久填0)】。只能禁言下级普通群员。
 7. 绝对不要使用 JSON！严格遵守纯文本格式输出：
    - 每一个独立的气泡之间必须用 === 分隔。
@@ -11024,19 +11085,28 @@ if (i === 0) {
 let timeHtml = `<div class="chat-time-stamp" ${['voice', 'redpacket', 'location', 'diary_invite', 'forward_card'].includes(msgType) ? 'style="display:none;"' : ''}>${tStr}</div>`;
             let innerTimeHtml = `<div class="chat-time-stamp" style="margin: 0 4px; align-self: flex-end; padding-bottom: 2px;">${tStr}</div>`;
             let formattedCleanText = (cleanText || '').replace(/\[(?:译|翻译|EN|En|Eng)[:：]\s*([\s\S]*?)\]/gi, '<div class="bilingual-trans">$1</div>');
+formattedCleanText = formattedCleanText.replace(/\[图片[:：]\s*([\s\S]*?)\]/gi, '<div class="fake-img-card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div class="fake-img-desc">$1</div></div>');
 
             let isPureStickerAPI = false;
-            let stickerUrlAPI = '';
-            const stickerMatchAPI = cleanText.match(/^\[表情包[:：](.*?)\]$/i);
-            if (stickerMatchAPI) {
-                const sticker = allStickersAPI.find(s => s.name === stickerMatchAPI[1].trim());
-                if (sticker) {
-                    isPureStickerAPI = true;
-                    stickerUrlAPI = sticker.url;
-                }
-            }
+let stickerUrlAPI = '';
+const stickerMatchAPI = cleanText.match(/^\[表情包[:：](.*?)\]$/i);
+if (stickerMatchAPI) {
+    const sticker = allStickersAPI.find(s => s.name === stickerMatchAPI[1].trim());
+    if (sticker) {
+        isPureStickerAPI = true;
+        stickerUrlAPI = sticker.url;
+    }
+}
 
-            formattedCleanText = formattedCleanText.replace(/[\(（]【?发送了?表情包[:：]?\s*(.*?)】?[\)）]/g, '[表情包:$1]');
+let isPureFakeImgAPI = false;
+let fakeImgDescAPI = '';
+const fakeImgMatchAPI = cleanText.match(/^\[图片[:：]\s*([\s\S]*?)\]$/i);
+if (fakeImgMatchAPI) {
+    isPureFakeImgAPI = true;
+    fakeImgDescAPI = fakeImgMatchAPI[1].trim();
+}
+
+formattedCleanText = formattedCleanText.replace(/[\(（]【?发送了?表情包[:：]?\s*(.*?)】?[\)）]/g, '[表情包:$1]');
             formattedCleanText = formattedCleanText.replace(/\[\[STICKER:(.*?)\]\]/gi, '[表情包:$1]');
             formattedCleanText = formattedCleanText.replace(/\[表情包[:：](.*?)\]/gi, (match, name) => {
                 let cleanName = name.split(/[\/\-：:]/).pop().trim();
@@ -11145,10 +11215,13 @@ let timeHtml = `<div class="chat-time-stamp" ${['voice', 'redpacket', 'location'
     `;
     bubbleStyle = `class="chat-special-bubble"`;
 } else if (isPureStickerAPI) {
-                contentHtml = `<img src="${stickerUrlAPI}" style="width: 120px; height: 120px; object-fit: cover; border-radius: 18px; background: transparent; display: block; margin: 2px 0;">`;
-                bubbleStyle = `class="chat-special-bubble"`;
-            } else {
-                contentHtml = formattedCleanText;
+    contentHtml = `<img src="${stickerUrlAPI}" style="width: 120px; height: 120px; object-fit: cover; border-radius: 18px; background: transparent; display: block; margin: 2px 0;">`;
+    bubbleStyle = `class="chat-special-bubble"`;
+} else if (isPureFakeImgAPI) {
+    contentHtml = `<div class="fake-img-card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg><div class="fake-img-desc">${fakeImgDescAPI}</div></div>`;
+    bubbleStyle = `class="chat-special-bubble"`;
+} else {
+    contentHtml = formattedCleanText;
                 bubbleStyle = `class="chat-bubble"`; 
             }
 
@@ -11360,7 +11433,7 @@ if (rCount === '') {
 5. 我们正在进行日常的跨频段文字聊天。我们有无法逾越的物理距离，你深刻意识到我们无法直接见面。
 6. 绝对禁止使用任何环境描写、心理活动或动作描写（严禁使用括号()、星号**等标出动作神态）。你的所有情绪张力、潜台词，都必须通过纯粹的对白文字、语气词、停顿（...）和标点符号来体现！
 7. 绝不许动不动就撩拨、调情、邪魅一笑或说油腻语录。遵守你的人物核心性格，决定语气、节奏、停顿如何把握。是否会主动寻找话题，是否会有弱势或缺陷，避免过度强调。遵守角色，决定是否应更从容和有松弛感，是否需要留白。
-8. 想发语音格式：[VOICE:秒数]文字。日记邀请格式：[DIARY_INVITE:附言] (同意回[日记同意]，拒绝回[日记拒绝])。发红包：[REDPACKET:金额]留言。发定位：[LOCATION:地点]留言。极低概率下，想对对方做肢体动作，单起一行：[POKE:动作描述] (如: [POKE:捏了捏你的脸颊])，严禁频繁使用！引用回复格式：[QUOTE:原话]你的回复。
+8. 想发语音格式：[VOICE:秒数]文字。发送图片格式：[图片:图片画面的详细描述]。日记邀请格式：[DIARY_INVITE:附言] (同意回[日记同意]，拒绝回[日记拒绝])。发红包：[REDPACKET:金额]留言。发定位：[LOCATION:地点]留言。极低概率下，想对对方做肢体动作，单起一行：[POKE:动作描述] (如: [POKE:捏了捏你的脸颊])，严禁频繁使用！引用回复格式：[QUOTE:原话]你的回复。
 ${replyCountText}${bilingualText}${backCmdText}`;
 
         let history = await loadFromDB(`chat_history_${currentChatContact.id}`) || [];
@@ -12454,7 +12527,7 @@ if (aiStickers.length > 0) {
 5. 我们正在进行日常的跨频段文字聊天。我们有无法逾越的物理距离，你深刻意识到我们无法直接见面。
 6. 绝对禁止使用任何环境描写、心理活动或动作描写（严禁使用括号()、星号**等标出动作神态）。你的所有情绪张力、潜台词，都必须通过纯粹的对白文字、语气词、停顿（...）和标点符号来体现！
 7. 绝不许动不动就撩拨、调情、邪魅一笑或说油腻语录。遵守你的人物核心性格，决定语气、节奏、停顿如何把握。是否会主动寻找话题，是否会有弱势或缺陷，避免过度强调。遵守角色，决定是否应更从容和有松弛感，是否需要留白。
-8. 想发语音格式：[VOICE:秒数]文字。日记邀请格式：[DIARY_INVITE:附言] (同意回[日记同意]，拒绝回[日记拒绝])。发红包：[REDPACKET:金额]留言。发定位：[LOCATION:地点]留言。极低概率下，想对对方做肢体动作，单起一行：[POKE:动作描述] (如: [POKE:捏了捏你的脸颊])，严禁频繁使用！引用回复格式：[QUOTE:原话]你的回复。
+8. 想发语音格式：[VOICE:秒数]文字。发送图片格式：[图片:图片画面的详细描述]。日记邀请格式：[DIARY_INVITE:附言] (同意回[日记同意]，拒绝回[日记拒绝])。发红包：[REDPACKET:金额]留言。发定位：[LOCATION:地点]留言。极低概率下，想对对方做肢体动作，单起一行：[POKE:动作描述] (如: [POKE:捏了捏你的脸颊])，严禁频繁使用！引用回复格式：[QUOTE:原话]你的回复。
 ${replyCountText}${bilingualText}${backCmdText}`;
 }
 
@@ -12873,6 +12946,7 @@ async function syncLastMessagePreview(contactId, history) {
         
         // 过滤掉碍眼的隐藏翻译标签
         previewText = previewText.replace(/\[(?:译|翻译|EN|En|Eng)[:：]\s*([\s\S]*?)\]/gi, '').trim();
+        previewText = previewText.replace(/\[图片[:：]\s*([\s\S]*?)\]/gi, '[图片]').trim();
     }
     await updateContactPreview(contactId, previewText);
 }
@@ -15278,10 +15352,46 @@ document.getElementById('editGroupNoticeBtn').addEventListener('click', () => {
         let contacts = await loadFromDB('chat_contacts') || [];
         let contactInfo = contacts.find(c => c.id === currentChatContact.id);
         if (contactInfo) {
-            contactInfo.notice = newNotice.trim() || '';
+            let finalNotice = newNotice.trim() || '';
+            contactInfo.notice = finalNotice;
             await saveToDB('chat_contacts', contacts);
-            document.getElementById('groupProfileNoticeText').innerText = contactInfo.notice || '暂无公告';
+            document.getElementById('groupProfileNoticeText').innerText = finalNotice || '暂无公告';
             showToast('群公告已修改');
+            
+            // ===== 新增：发送系统公告到群聊，让 AI 感知 =====
+            if (finalNotice) {
+                // 1. 获取群主真实名字
+                let ownerId = contactInfo.owner || 'me';
+                let ownerName = '我';
+                const chars = await loadFromDB('ai_characters') || [];
+                
+                if (ownerId === 'me') {
+                    // 如果群主是我，去找我绑定的马甲名字
+                    const settings = await loadFromDB(`chat_settings_${currentChatContact.id}`) || {};
+                    if (settings.userRoleId) {
+                        const myRole = chars.find(c => c.id === settings.userRoleId);
+                        if (myRole) ownerName = myRole.name;
+                    }
+                } else {
+                    // 如果群主是 AI，去找 AI 的名字
+                    const aiRole = chars.find(c => c.id === ownerId);
+                    if (aiRole) ownerName = aiRole.name;
+                }
+
+                // 2. 构造小字文本并存入群聊天记录
+                const sysText = `[群主] ${ownerName} 更新了群公告："${finalNotice}"`;
+                let history = await loadFromDB(`chat_history_${currentChatContact.id}`) || [];
+                history.push({ role: 'system', content: sysText, timestamp: Date.now() });
+                await saveToDB(`chat_history_${currentChatContact.id}`, history);
+                
+                // 3. 静默刷新群聊面板
+                if (document.getElementById('chatRoomPanel').classList.contains('show')) {
+                    if (typeof renderChatMessages === 'function') {
+                        await renderChatMessages(history, currentChatContact.id);
+                    }
+                }
+            }
+            // ===================================
         }
     });
 });
