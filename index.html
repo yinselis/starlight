@@ -10817,8 +10817,6 @@ if (stickerRules.length > 0) {
 }
 // ===================================================
 
-    // ===================================================
-
     // ★★★ 核心修复：把指令集（世界书/规则）和双语翻译开关正式接入群聊！ ★★★
     const commands = await loadFromDB('ai_commands') || [];
     const boundCmdIds = settings.boundCommands || [];
@@ -10835,9 +10833,35 @@ if (stickerRules.length > 0) {
 
     const bilingualText = settings.bilingual ? `\n8. 【最高强制指令 - 翻译思维链】：每次输出前，请先在内部逻辑中执行“语言属性检测”：1. 确认即将输出的句子是否包含英语、日语、粤语等非普通话。2. 若包含，必须在含有外语/方言的句末，附加严格格式的翻译。格式必须且只能是：[译: 标准普通话翻译]。严禁自创格式（如(翻译: xxx)、[EN: xxx]）！示例：What a beautiful day! [译: 今天天气真不错！]` : '';
 
+    // ==== 新增修复：让群聊也能读取自动总结的记忆，并开启关键词雷达 ====
+    const allMemories = await loadFromDB(`chat_memories_${contactId}`) || [];
+    const activeMemories = allMemories.filter(m => !m.isArchived);
+    const archivedMemories = allMemories.filter(m => m.isArchived && m.triggerKeys);
+    
+    // 雷达扫描：抓取你最近发送的3条消息，看有没有触发归档里的旧日关键词
+    const recentUserMsgs = history.filter(m => m.role === 'user').slice(-3).map(m => m.content).join(' ');
+    let awakenedMemories = [];
+    if (recentUserMsgs) {
+        archivedMemories.forEach(mem => {
+            const keys = mem.triggerKeys.split(/[,，、]/).map(k => k.trim()).filter(k => k);
+            for (let key of keys) {
+                if (recentUserMsgs.includes(key)) {
+                    awakenedMemories.push(mem.content);
+                    break;
+                }
+            }
+        });
+    }
+    let radarText = awakenedMemories.length > 0 ? `\n\n【被当前对话触动唤醒的旧日记忆】（这让大家回想起了这些往事）：\n${awakenedMemories.join('\n')}` : '';
+    const memoryText = (activeMemories.length > 0 || awakenedMemories.length > 0) 
+        ? `\n【往期剧情与常驻记忆】：\n${activeMemories.map(m => m.content).join('\n')}${radarText}` 
+        : '';
+    // ==============================================================
+
     const sysPrompt = `你是一个多角色群聊推演引擎。正在模拟的群聊是：【${contactInfo.name}】。
 【群内角色名单与设定】：
 ${memberDesc}
+${memoryText}
 ${frontCmdText}
 
 【核心推演与意识指令】：
