@@ -10842,7 +10842,16 @@ initialBubbles.forEach(b => {
     let text = nameMatch ? b.replace(/^\[.*?\]\s*/, '').trim() : b;
     
     // === 新增修复：防止引用等功能框和正文被大模型的换行强行切断 ===
-    text = text.replace(/(\[(QUOTE|LOCATION|REDPACKET|VOICE|DIARY_INVITE):.*?\])\s*\n+/gi, '$1 ');
+    // === 新增修复：防止引用等功能框和正文被大模型的换行强行切断 ===
+text = text.replace(/(\[(QUOTE|LOCATION|REDPACKET|VOICE|DIARY_INVITE):.*?\])\s*\n+/gi, '$1 ');
+
+// ★ 核心修复：强行合并被大模型意外换行的双语翻译标签，防止它变成空壳孤儿气泡导致点击不生效！
+text = text.replace(/\n+\s*(\[(?:译|翻译|EN|En|Eng)[:：].*?\])/gi, ' $1');
+
+// 强行把同一个人的回车换行，全部切成独立连发的连珠炮气泡！
+text.split('\n').map(l => l.trim()).filter(l => l).forEach(line => {
+    bubbles.push(`[${name}]\n${line}`);
+});
     
     // 强行把同一个人的回车换行，全部切成独立连发的连珠炮气泡！
     text.split('\n').map(l => l.trim()).filter(l => l).forEach(line => {
