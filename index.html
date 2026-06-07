@@ -12093,7 +12093,7 @@ if (contactInfo.members && contactInfo.members.length > 0) {
 
 // 3. 邀请按钮虚线框
 membersHtml += `
-    <div style="display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0; cursor:pointer;" onclick="showToast('邀请新成员功能开发中...')">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0; cursor:pointer;" onclick="openInviteMemberModal()" >
         <div style="width:54px; height:54px; border-radius:18px; border:2px dashed rgba(184,156,142,0.5); display:flex; justify-content:center; align-items:center; color:var(--accent);">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         </div>
@@ -15255,7 +15255,7 @@ if (contactInfo.members && contactInfo.members.length > 0) {
 
 // 3. 邀请按钮虚线框
 memberListEl.innerHTML += `
-    <div style="display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0; cursor:pointer;" onclick="showToast('邀请新成员功能开发中...')">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0; cursor:pointer;" onclick="openInviteMemberModal()" >
         <div style="width:54px; height:54px; border-radius:18px; border:2px dashed rgba(184,156,142,0.4); display:flex; justify-content:center; align-items:center; color:var(--text-sub); transition:0.2s;">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         </div>
@@ -15592,7 +15592,7 @@ const quietRefresh = async () => {
     }
 
     membersHtml += `
-        <div style="display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0; cursor:pointer;" onclick="showToast('邀请新成员功能开发中...')">
+        <div style="display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0; cursor:pointer;" onclick="openInviteMemberModal()" >
             <div style="width:54px; height:54px; border-radius:18px; border:2px dashed rgba(184,156,142,0.5); display:flex; justify-content:center; align-items:center; color:var(--accent);">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </div>
@@ -16448,6 +16448,110 @@ window.addEventListener('load', () => {
         }
     }, 3500);
 });
+
+// =====================================
+// 邀请新成员加入群聊功能
+// =====================================
+window.openInviteMemberModal = async function() {
+    if (!currentChatContact) return;
+    let contacts = await loadFromDB('chat_contacts') || [];
+    let contactInfo = contacts.find(c => c.id === currentChatContact.id);
+    if (!contactInfo || !contactInfo.isGroup) return;
+
+    // 获取全部角色并过滤出不在群里的
+    const allChars = await loadFromDB('ai_characters') || [];
+    const aiChars = allChars.filter(c => c.roleType === 'char');
+    const availableChars = aiChars.filter(c => !contactInfo.members.includes(c.id));
+    
+    if (availableChars.length === 0) {
+        showToast('档案库里的角色都已经在这个群里啦~');
+        return;
+    }
+
+    // 构建弹窗
+    let modal = document.getElementById('inviteMemberModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'inviteMemberModal';
+        modal.className = 'custom-confirm-overlay';
+        document.body.appendChild(modal);
+    }
+    
+    let listHtml = '';
+    for (let char of availableChars) {
+        let avatarUrl = diaryAvatarCache[char.id];
+        if (avatarUrl === undefined) {
+            const f = await loadFromDB(`char_avatar_${char.id}`);
+            avatarUrl = f ? URL.createObjectURL(f) : '';
+            diaryAvatarCache[char.id] = avatarUrl;
+        }
+
+        listHtml += `
+            <div class="char-card invite-char-card" data-id="${char.id}" style="cursor:pointer; display:flex; align-items:center; padding:14px 16px; margin-bottom:12px; background:rgba(255,255,255,0.6); border:1.5px solid rgba(255,255,255,0.6); border-radius:20px; transition:0.2s;" onclick="this.classList.toggle('selected')">
+                <div class="char-card-avatar" style="${avatarUrl ? `background-image:url(${avatarUrl}); border:none;` : 'background-color:rgba(184,156,142,0.2)'}; width:46px; height:46px; border-radius:16px; box-shadow: 0 4px 12px rgba(128,118,110,0.06); flex-shrink:0; background-size:cover; background-position:center;"></div>
+                <div class="char-card-info" style="flex:1; margin-left:14px;">
+                    <div class="char-card-name" style="font-size:15px; font-weight:800; color:var(--text-main); letter-spacing:1px;">${char.name}</div>
+                </div>
+                <div class="sel-check" style="width:22px; height:22px; border-radius:50%; border:1.5px solid rgba(184,156,142,0.3); display:flex; justify-content:center; align-items:center; background: rgba(255,255,255,0.5); transition:all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); flex-shrink:0;">
+                    <svg viewBox="0 0 24 24" style="width:14px; height:14px; stroke:#fff; fill:none; stroke-width:3.5; stroke-linecap:round; stroke-linejoin:round; opacity:0; transform:scale(0.5); transition:all 0.3s;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </div>
+            </div>
+        `;
+    }
+    
+    modal.innerHTML = `
+        <div class="custom-confirm-box" style="background:#F6F4F0; width: 85vw; max-width: 320px; padding: 24px 20px; display:flex; flex-direction:column; max-height:80vh;">
+            <div class="cc-title" style="margin-bottom:16px; font-size:16px;">邀请新成员</div>
+            <style>
+                .invite-char-card.selected { background: #fff !important; border-color: var(--accent) !important; box-shadow: 0 12px 32px rgba(184,156,142,0.18) !important; }
+                .invite-char-card.selected .sel-check { background: var(--accent) !important; border-color: var(--accent) !important; transform: scale(1.1); }
+                .invite-char-card.selected .sel-check svg { opacity: 1 !important; transform: scale(1) !important; }
+            </style>
+            <div style="flex:1; overflow-y:auto; padding-bottom:12px; margin-bottom:12px; scrollbar-width:none;">
+                ${listHtml}
+            </div>
+            <div class="cc-btns" style="margin-top:auto;">
+                <button class="cc-btn cancel" onclick="document.getElementById('inviteMemberModal').classList.remove('show')">取消</button>
+                <button class="cc-btn primary" id="confirmInviteBtn" style="background:var(--accent); box-shadow: 0 4px 16px rgba(184,156,142,0.3);">确认邀请</button>
+            </div>
+        </div>
+    `;
+    
+    modal.classList.add('show');
+    
+    // 确认邀请逻辑
+    document.getElementById('confirmInviteBtn').onclick = async () => {
+        const selectedCards = modal.querySelectorAll('.invite-char-card.selected');
+        if (selectedCards.length === 0) {
+            showToast('请至少选择一位需要邀请的角色！');
+            return;
+        }
+        
+        const newMemberIds = Array.from(selectedCards).map(c => c.dataset.id);
+        const newMemberNames = Array.from(selectedCards).map(c => c.querySelector('.char-card-name').innerText);
+        
+        // 1. 将新成员追加到群列表并保存
+        contactInfo.members = contactInfo.members.concat(newMemberIds);
+        await saveToDB('chat_contacts', contacts);
+        
+        modal.classList.remove('show');
+        showToast('新成员已加入群聊！');
+        
+        // 2. 发送全群可见的系统公告消息
+        let history = await loadFromDB(`chat_history_${currentChatContact.id}`) || [];
+        const sysText = `${newMemberNames.join('、')} 被邀请加入了群聊`;
+        history.push({ role: 'system', content: sysText, timestamp: Date.now() });
+        await saveToDB(`chat_history_${currentChatContact.id}`, history);
+        
+        // 3. 静默刷新所有聊天室渲染
+        if (document.getElementById('chatRoomPanel').classList.contains('show')) {
+            await renderChatMessages(history, currentChatContact.id);
+            // 这里用了一个取巧的方法，利用自带的旧函数闭环，重新模拟点击右上角的“设置”按钮以无缝刷新面板成员列表
+            const refreshBtn = document.getElementById('chatRoomSettingsBtn');
+            if (refreshBtn) refreshBtn.click();
+        }
+    };
+};
 
 </script>
 
