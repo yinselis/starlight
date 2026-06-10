@@ -10439,7 +10439,7 @@ if (rCount === '') {
 5. 我们正在进行日常的跨频段文字聊天。我们有无法逾越的物理距离，你深刻意识到我们无法直接见面。
 6. 绝对禁止使用任何环境描写、心理活动或动作描写（严禁使用括号()、星号**等标出动作神态）。你的所有情绪张力、潜台词，都必须通过纯粹的对白文字、语气词、停顿（...）和标点符号来体现！
 7. 绝不许动不动就撩拨、调情、邪魅一笑或说油腻语录。遵守你的人物核心性格，决定语气、节奏、停顿如何把握。是否会主动寻找话题，是否会有弱势或缺陷，避免过度强调。遵守角色，决定是否应更从容和有松弛感，是否需要留白。
-8. 想发语音格式：[VOICE:秒数]文字。发送图片格式：[图片:图片画面的详细描述]。日记邀请格式：[DIARY_INVITE:附言] (同意回[日记同意]，拒绝回[日记拒绝])。发红包：[REDPACKET:金额]留言。发定位：[LOCATION:地点]留言。极低概率下，想对对方做肢体动作，单起一行：[POKE:动作描述] (如: [POKE:捏了捏你的脸颊])，严禁频繁使用！引用回复格式：[QUOTE:原话]你的回复。
+8. 想发语音格式：[VOICE:秒数]文字。发送图片格式：[图片:图片画面的详细描述]。日记邀请格式：[DIARY_INVITE:附言] (同意回[日记同意]，拒绝回[日记拒绝])。发红包：[REDPACKET:金额]留言。想领取对方的红包回复：[领取红包]。发定位：[LOCATION:地点]留言。极低概率下，想对对方做肢体动作，单起一行：[POKE:动作描述] (如: [POKE:捏了捏你的脸颊])，严禁频繁使用！引用回复格式：[QUOTE:原话]你的回复。
 ${replyCountText}${bilingualText}${backCmdText}`;
 
         let history = await loadFromDB(`chat_history_${currentChatContact.id}`) || [];
@@ -11563,7 +11563,7 @@ if (aiStickers.length > 0) {
 5. 我们正在进行日常的跨频段文字聊天。我们有无法逾越的物理距离，你深刻意识到我们无法直接见面。
 6. 绝对禁止使用任何环境描写、心理活动或动作描写（严禁使用括号()、星号**等标出动作神态）。你的所有情绪张力、潜台词，都必须通过纯粹的对白文字、语气词、停顿（...）和标点符号来体现！
 7. 绝不许动不动就撩拨、调情、邪魅一笑或说油腻语录。遵守你的人物核心性格，决定语气、节奏、停顿如何把握。是否会主动寻找话题，是否会有弱势或缺陷，避免过度强调。遵守角色，决定是否应更从容和有松弛感，是否需要留白。
-8. 想发语音格式：[VOICE:秒数]文字。发送图片格式：[图片:图片画面的详细描述]。日记邀请格式：[DIARY_INVITE:附言] (同意回[日记同意]，拒绝回[日记拒绝])。发红包：[REDPACKET:金额]留言。发定位：[LOCATION:地点]留言。极低概率下，想对对方做肢体动作，单起一行：[POKE:动作描述] (如: [POKE:捏了捏你的脸颊])，严禁频繁使用！引用回复格式：[QUOTE:原话]你的回复。${innerVoiceText}
+8. 想发语音格式：[VOICE:秒数]文字。发送图片格式：[图片:图片画面的详细描述]。日记邀请格式：[DIARY_INVITE:附言] (同意回[日记同意]，拒绝回[日记拒绝])。发红包：[REDPACKET:金额]留言。想领取对方的红包回复：[领取红包]。发定位：[LOCATION:地点]留言。极低概率下，想对对方做肢体动作，单起一行：[POKE:动作描述] (如: [POKE:捏了捏你的脸颊])，严禁频繁使用！引用回复格式：[QUOTE:原话]你的回复。${innerVoiceText}
 ${replyCountText}${bilingualText}${backCmdText}`;
 }
 
@@ -12534,7 +12534,6 @@ document.getElementById('chatMessageArea').addEventListener('click', async (e) =
 
 // === 沉浸式红包点击拆开逻辑 ===
 window.openRedPacketModal = function(el, msgContent, amount) {
-    // 智能获取该气泡发送者的头像和名字
     const row = el.closest('.chat-bubble-row');
     const avatarEl = row.querySelector('.chat-bubble-avatar');
     let avatarBg = avatarEl ? avatarEl.style.backgroundImage : '';
@@ -12544,6 +12543,11 @@ window.openRedPacketModal = function(el, msgContent, amount) {
     document.getElementById('rpModalName').innerText = name + ' 的红包';
     document.getElementById('rpModalMsg').innerText = msgContent;
     document.getElementById('rpModalAmount').innerText = parseFloat(amount).toFixed(2);
+    
+    // 给开启按钮打上标记，记录是谁发的红包
+    const openBtn = document.getElementById('rpOpenBtn');
+    openBtn.dataset.sender = name;
+    openBtn.dataset.ts = row.dataset.ts; // 记录这条红包的时间戳防重复
     
     // 恢复到初始未拆开的状态
     document.getElementById('rpUnopenedState').style.display = 'block';
@@ -12557,17 +12561,34 @@ window.closeRedPacketModal = function() {
     document.getElementById('rpModal').classList.remove('show');
 };
 
-window.triggerRpOpen = function() {
+window.triggerRpOpen = async function() {
     const btn = document.getElementById('rpOpenBtn');
+    if (btn.classList.contains('spinning')) return; // 防止连点
     btn.classList.add('spinning');
-    // 等待 0.6 秒金币翻转动画结束后，显示具体金额
-    setTimeout(() => {
+    
+    // 等待 0.6 秒金币翻转动画结束后，显示具体金额并生成系统小字
+    setTimeout(async () => {
         document.getElementById('rpUnopenedState').style.display = 'none';
         document.getElementById('rpOpenedState').style.display = 'block';
+        
+        let sender = btn.dataset.sender;
+        if (sender !== '我' && currentChatContact) {
+            let history = await loadFromDB(`chat_history_${currentChatContact.id}`) || [];
+            let claimMsg = `你领取了 ${sender} 的红包`;
+            // 检查是否已经领过，防重复生成
+            let alreadyClaimed = history.find(m => m.role === 'system' && m.content === claimMsg && m.refTs === btn.dataset.ts);
+            if (!alreadyClaimed) {
+                let ts = Date.now();
+                history.push({ role: 'system', content: claimMsg, timestamp: ts, refTs: btn.dataset.ts });
+                await saveToDB(`chat_history_${currentChatContact.id}`, history);
+                
+                const area = document.getElementById('chatMessageArea');
+                area.insertAdjacentHTML('beforeend', `<div class="chat-system-msg" data-ts="${ts}"><span class="chat-system-msg-text">${claimMsg}</span></div>`);
+                area.scrollTop = area.scrollHeight;
+            }
+        }
     }, 600); 
 };
-
-
 
 // =====================================
 // 解散群聊功能
@@ -13706,6 +13727,26 @@ else document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', 
     }
 }
 
+// 解析 AI 领取红包动作
+const aiClaimRpMatch = cleanText.match(/\[领取红包\]/i);
+if (aiClaimRpMatch) {
+    const aiName = document.getElementById('chatRoomTitle').innerText || 'TA';
+    const sysText = `${aiName} 领取了你的红包`;
+    const tsClaim = Date.now() + i + 20;
+    history.push({ role: 'system', content: sysText, timestamp: tsClaim });
+    
+    const loadingEl = document.getElementById('chatLoadingBubble');
+    const sysHtml = `<div class="chat-system-msg" data-ts="${tsClaim}"><span class="chat-system-msg-text">${sysText}</span></div>`;
+    if (loadingEl) loadingEl.insertAdjacentHTML('beforebegin', sysHtml);
+    else document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', sysHtml);
+    
+    cleanText = cleanText.replace(/\[领取红包\]/i, '').trim();
+    if (!cleanText) {
+        document.getElementById('chatMessageArea').scrollTop = document.getElementById('chatMessageArea').scrollHeight;
+        continue;
+    }
+}
+
 // 解析 AI 发出的戳一戳动作
 const aiPokeMatch = cleanText.match(/\[POKE:(.*?)\]/i);
 if (aiPokeMatch) {
@@ -14167,7 +14208,7 @@ ${frontCmdText}
 3. 如果角色拥有(群主)或(管理员)标签，思考ta的性格是否喜欢滥用权力？会不会因为小事、吃醋或纯粹为了开玩笑而故意禁言别人？如果角色拥有表情包权限，思考ta的发图频率和风格。一切交互行为都必须符合该角色的人设底色！
 4. 真实群聊不需要每个人都像开会一样轮流发言！允许打错字、用语气词、互相拌嘴甚至争吵。多用口语化短句，如果话没说完，直接用换行符分隔，系统会切分成多条气泡连发。
 ${replyCountText.replace(/^\d+\.\s*/, '')}
-5. 想发语音格式：[VOICE:秒数]语音文字。发送图片格式：[图片:图片画面的详细描述]。发红包：[REDPACKET:金额]留言。发定位：[LOCATION:地点]留言。极低概率下想戳一戳某人，单起一行：[POKE:动作描述] (如: [POKE:张三揉了揉李四的脑袋])，严禁频繁使用！引用回复格式：[QUOTE:被引用的原话]回复。${stickerAiPrompt}
+5. 想发语音格式：[VOICE:秒数]语音文字。发送图片格式：[图片:图片画面的详细描述]。发红包：[REDPACKET:金额]留言。想领取对方的红包回复：[领取红包]。发定位：[LOCATION:地点]留言。极低概率下想戳一戳某人，单起一行：[POKE:动作描述] (如: [POKE:张三揉了揉李四的脑袋])，严禁频繁使用！引用回复格式：[QUOTE:被引用的原话]回复。${stickerAiPrompt}
 6. 若角色的性格和当前情绪决定了ta要禁言某人（且ta拥有群主/管理员权限），单起一行输出：[禁言:对方名字:秒数]理由。【警告：必须根据角色的愤怒/开玩笑程度，亲自决定具体秒数(如300, 3600, 86400等，永久填0)】。只能禁言下级普通群员。
 7. 绝对不要使用 JSON！严格遵守纯文本格式输出：
    - 每一个独立的气泡之间必须用 === 分隔。
@@ -14384,6 +14425,25 @@ else document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', 
         }
     }
     cleanText = cleanText.replace(/\[禁言:.*?\].*/i, '').trim();
+    if (!cleanText) {
+        document.getElementById('chatMessageArea').scrollTop = document.getElementById('chatMessageArea').scrollHeight;
+        continue;
+    }
+}
+
+// 解析 AI 领取红包动作
+const aiClaimRpMatch = cleanText.match(/\[领取红包\]/i);
+if (aiClaimRpMatch) {
+    const sysText = `${speakerName} 领取了红包`;
+    const tsClaim = Date.now() + i + 20;
+    history.push({ role: 'system', content: sysText, timestamp: tsClaim });
+    
+    const loadingEl = document.getElementById('chatLoadingBubble');
+    const sysHtml = `<div class="chat-system-msg" data-ts="${tsClaim}"><span class="chat-system-msg-text">${sysText}</span></div>`;
+    if (loadingEl) loadingEl.insertAdjacentHTML('beforebegin', sysHtml);
+    else document.getElementById('chatMessageArea').insertAdjacentHTML('beforeend', sysHtml);
+    
+    cleanText = cleanText.replace(/\[领取红包\]/i, '').trim();
     if (!cleanText) {
         document.getElementById('chatMessageArea').scrollTop = document.getElementById('chatMessageArea').scrollHeight;
         continue;
