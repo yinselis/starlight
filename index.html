@@ -4989,7 +4989,7 @@ setTimeout(() => toast.remove(), 2200);
 
         function initDB() {
             return new Promise((resolve, reject) => {
-                const request = indexedDB.open(DB_NAME, 2);
+                const request = indexedDB.open(DB_NAME, 3);
                 request.onupgradeneeded = (e) => {
                     const db = e.target.result;
                     if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -15925,16 +15925,18 @@ document.getElementById('importBackupInput').addEventListener('change', async fu
             loading.innerHTML = `<div style="width:30px; height:30px; border:3px solid var(--accent); border-top-color:transparent; border-radius:50%; animation:spin 1s linear infinite; margin-bottom:16px;"></div>正在读取封存包...`;
             await new Promise(r => setTimeout(r, 100));
 
-            // 读取文件并拆解内部切片
-            const text = await file.text();
-            let chunks = [];
-            
-            // 兼容你之前的老版本 json
-            if (text.includes(SPLIT_TAG)) {
-                chunks = text.split(SPLIT_TAG);
-            } else {
-                chunks = [text]; // 老版本整块直接吃
-            }
+// 读取文件并拆解内部切片
+const rawText = await file.text();
+// 【修复：强行统一换行符，防止安卓TXT格式篡改导致切割失败】
+const text = rawText.replace(/\r\n/g, '\n');
+let chunks = [];
+
+if (text.includes('---STARLIGHT_CHUNK_SPLIT---')) {
+    // 【修复：用正则无视换行符残留，强行切片】
+    chunks = text.split(/[\n]*---STARLIGHT_CHUNK_SPLIT---[\n]*/);
+} else {
+    chunks = [text];
+}
 
             if (mode === 'overwrite') {
                 localStorage.clear();
@@ -16013,11 +16015,12 @@ document.getElementById('importBackupInput').addEventListener('change', async fu
 
             loading.innerHTML = `<div style="font-size:32px; margin-bottom:12px;">✨</div>系统重构完毕，即将重启...`;
             setTimeout(() => location.reload(), 1200);
-        } catch (e) {
-            loading.remove();
-            console.error(e);
-            showToast("导入中断，文件格式异常");
-        }
+} catch (e) {
+    loading.remove();
+    console.error(e);
+    alert("导入报错详情: " + e.message); // 强行弹窗看具体死在哪里
+    showToast("导入中断，文件格式异常");
+}
         event.target.value = '';
     };
 
